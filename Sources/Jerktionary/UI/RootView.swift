@@ -67,7 +67,6 @@ struct MainView: View {
                 } else if store.currentText.isEmpty && !store.isListening && store.answeredQuestions.isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
                         MeetingContextField()
-                            .frame(maxWidth: 680, alignment: .leading)
                             .padding(.horizontal, 28)
                             .padding(.top, 4)
                         EmptySessionView()
