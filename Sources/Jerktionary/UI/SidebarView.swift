@@ -31,27 +31,6 @@ struct SidebarView: View {
                     }
                 }
 
-                if !store.terms.isEmpty {
-                    section("Термины") {
-                        FlowTagsView(terms: store.terms)
-                    }
-                }
-
-                if !store.lastExplanations.isEmpty {
-                    section("Объяснения") {
-                        ForEach(store.lastExplanations) { item in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.explanation.title.isEmpty ? item.term : item.explanation.title)
-                                    .font(.caption.weight(.semibold))
-                                Text(item.explanation.short)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(3)
-                            }
-                            .journalCard(padding: 10)
-                        }
-                    }
-                }
             }
             // Clears the traffic lights under the hidden title bar.
             .padding(.top, 44)
@@ -162,37 +141,3 @@ struct ComponentsListView: View {
     }
 }
 
-/// Wrapping tag cloud for terms.
-struct FlowTagsView: View {
-    @EnvironmentObject private var store: AppStore
-    let terms: [TranscriptTerm]
-    @State private var selected: TranscriptTerm?
-
-    private var uniqueTerms: [TranscriptTerm] {
-        var seen = Set<String>()
-        return terms.filter { seen.insert($0.normalized).inserted }
-    }
-
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], alignment: .leading, spacing: 6) {
-            ForEach(uniqueTerms) { term in
-                Button {
-                    selected = term
-                    store.explanations.fetchStreaming(term: term.normalized, context: store.currentText)
-                } label: {
-                    Text(term.text)
-                        .font(.caption)
-                        .foregroundStyle(Theme.tint)
-                        .lineLimit(1)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(Theme.tint.opacity(0.1), in: Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .popover(item: $selected) { term in
-            TermExplanationPopover(term: term)
-        }
-    }
-}
