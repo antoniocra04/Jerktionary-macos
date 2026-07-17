@@ -47,9 +47,17 @@ final class AppSettings: ObservableObject {
     }
 
     var normalizedHttpUrl: String {
-        let trimmed = backendHttpUrl.trimmingCharacters(in: .whitespaces)
-        let cleaned = trimmed.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-        return cleaned.isEmpty ? Self.defaultBackendHttpUrl : cleaned
+        var cleaned = backendHttpUrl
+            .trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+        guard !cleaned.isEmpty else { return Self.defaultBackendHttpUrl }
+        // A schemeless "192.168.0.17:8000" produces broken URLs (the host is
+        // parsed as the scheme) and the http→ws rewrite never matches.
+        let lowercased = cleaned.lowercased()
+        if !lowercased.hasPrefix("http://"), !lowercased.hasPrefix("https://") {
+            cleaned = "http://" + cleaned
+        }
+        return cleaned
     }
 
     var websocketUrl: URL? {
