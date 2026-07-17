@@ -73,22 +73,31 @@ struct MainView: View {
                         EmptySessionView()
                     }
                 } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            if let error = store.microphoneError ?? store.websocketError {
-                                ErrorBanner(message: error)
-                            }
-                            MeetingContextField()
-                            LiveAnswersView()
-                            TranscriptView()
+                    // Two-column session layout: answers on the left,
+                    // the live transcript on the right, scrolled independently.
+                    VStack(alignment: .leading, spacing: 16) {
+                        if let error = store.microphoneError ?? store.websocketError {
+                            ErrorBanner(message: error)
                         }
-                        .frame(maxWidth: 680, alignment: .leading)
-                        .padding(.horizontal, 28)
-                        .padding(.bottom, 28)
-                        .padding(.top, 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        MeetingContextField()
+                        HStack(alignment: .top, spacing: 18) {
+                            ScrollView {
+                                LiveAnswersView()
+                                    .padding(.bottom, 28)
+                            }
+                            .scrollContentBackground(.hidden)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                            ScrollView {
+                                TranscriptView()
+                                    .padding(.bottom, 28)
+                            }
+                            .scrollContentBackground(.hidden)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
                     }
-                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 4)
                 }
             }
         }
