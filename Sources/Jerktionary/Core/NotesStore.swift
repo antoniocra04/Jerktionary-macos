@@ -73,14 +73,15 @@ final class NotesStore: ObservableObject {
         return note
     }
 
-    /// Replaces the note in place. Deliberately does NOT re-sort: reordering the
-    /// list on every keystroke makes it jump and desyncs the selection, so the
-    /// wrong note appears to be edited. Order is set on load and on create only.
+    /// Bumps the edited time and re-sorts so the note moves to the top (Apple
+    /// Notes style). Safe to sort now that editing is keyed by note id, not by
+    /// list position — the selection can't desync onto the wrong note.
     func update(_ note: Note) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
         var updated = note
         updated.updatedAt = Date.now.timeIntervalSince1970 * 1000
         notes[index] = updated
+        notes.sort { $0.updatedAt > $1.updatedAt }
         persist()
     }
 

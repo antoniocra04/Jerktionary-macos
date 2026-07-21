@@ -1,21 +1,31 @@
 import SwiftUI
 
-/// Notes working area: a list of notes on the left, the editor on the right.
-/// Independent of the listening pipeline — transcription and answers keep
-/// running while this tab is shown.
+/// Notes working area. A thin wrapper that hands the nested NotesStore to a
+/// body that observes it directly — otherwise, since NotesView only watches
+/// AppStore, changes to the nested store's notes wouldn't refresh the list.
 struct NotesView: View {
     @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        NotesBody(notesStore: store.notes)
+    }
+}
+
+/// List of notes on the left, the editor on the right. Independent of the
+/// listening pipeline — transcription and answers keep running here.
+private struct NotesBody: View {
+    @ObservedObject var notesStore: NotesStore
     @State private var selectedID: String?
 
-    private var notes: [Note] { store.notes.notes }
+    private var notes: [Note] { notesStore.notes }
 
     /// A binding straight to the note in the store, so the editor and the list
     /// share one source of truth — the title updates in the list as you type.
     private func binding(for id: String) -> Binding<Note>? {
-        guard store.notes.notes.contains(where: { $0.id == id }) else { return nil }
+        guard notesStore.notes.contains(where: { $0.id == id }) else { return nil }
         return Binding(
-            get: { store.notes.notes.first { $0.id == id } ?? Note.new() },
-            set: { store.notes.update($0) }
+            get: { notesStore.notes.first { $0.id == id } ?? Note.new() },
+            set: { notesStore.update($0) }
         )
     }
 
@@ -38,7 +48,7 @@ struct NotesView: View {
         .padding(.top, 4)
         .padding(.bottom, 28)
         .onAppear {
-            store.notes.load()
+            notesStore.load()
             if selectedID == nil || !notes.contains(where: { $0.id == selectedID }) {
                 selectedID = notes.first?.id
             }
@@ -52,7 +62,7 @@ struct NotesView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    let note = store.notes.create()
+                    let note = notesStore.create()
                     selectedID = note.id
                 } label: {
                     Image(systemName: "square.and.pencil")
@@ -75,13 +85,15 @@ struct NotesView: View {
                             NoteRow(note: note, selected: note.id == selectedID) {
                                 selectedID = note.id
                             } onDelete: {
-                                store.notes.delete(note.id)
+                                notesStore.delete(note.id)
                                 if selectedID == note.id {
-                                    selectedID = store.notes.notes.first?.id
+                                    selectedID = notesStore.notes.first?.id
                                 }
                             }
                         }
                     }
+                    // Animate the move-to-top reorder when a note is edited.
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: notes.map(\.id))
                 }
                 .scrollContentBackground(.hidden)
             }
@@ -136,8 +148,8 @@ private struct NoteRow: View {
     }
 }
 
-/// Title + body editor bound directly to the store's note — no local copy, so
-/// there's a single source of truth and edits always land on the right note.
+/// Title + body editor bound directly to the store's note — a single source of
+/// truth, so edits always land on the right note and the list reflects them live.
 private struct NoteEditor: View {
     @Binding var note: Note
 
