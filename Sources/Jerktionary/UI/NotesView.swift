@@ -150,23 +150,58 @@ private struct NoteRow: View {
 
 /// Title + body editor bound directly to the store's note — a single source of
 /// truth, so edits always land on the right note and the list reflects them live.
+/// The body supports Markdown via an edit/preview toggle.
 private struct NoteEditor: View {
     @Binding var note: Note
+    @State private var preview = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("Заголовок", text: $note.title)
-                .textFieldStyle(.plain)
-                .font(.title2.weight(.bold))
+            HStack(alignment: .firstTextBaseline) {
+                TextField("Заголовок", text: $note.title)
+                    .textFieldStyle(.plain)
+                    .font(.title2.weight(.bold))
+
+                Picker("", selection: $preview) {
+                    Image(systemName: "pencil").tag(false)
+                    Image(systemName: "eye").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help(preview ? "Редактировать" : "Просмотр Markdown")
+            }
 
             Divider()
 
-            TextEditor(text: $note.body)
-                .font(.body)
+            if preview {
+                ScrollView {
+                    Group {
+                        if note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("Пусто. Переключитесь в режим ✎, чтобы писать. Поддерживается Markdown.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            MarkdownView(text: note.body)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 2)
+                }
                 .scrollContentBackground(.hidden)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                TextEditor(text: $note.body)
+                    .font(.system(.body, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
             HStack {
+                Text("Markdown")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 Text("Изменено \(NotesStore.formatDate(note.updatedAt))")
                     .font(.caption2)
