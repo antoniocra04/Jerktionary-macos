@@ -62,43 +62,55 @@ struct MainView: View {
             VStack(alignment: .leading, spacing: 0) {
                 MainTopBar()
 
-                if store.backendStatusLoaded, store.backendUnavailable || !store.backendReady {
-                    BackendUnavailableView()
-                } else if store.currentText.isEmpty && !store.isListening && store.answeredQuestions.isEmpty {
-                    VStack(alignment: .leading, spacing: 0) {
-                        MeetingContextField()
-                            .padding(.horizontal, 28)
-                            .padding(.top, 4)
-                        EmptySessionView()
-                    }
-                } else {
-                    // Two-column session layout: answers on the left,
-                    // the live transcript on the right, scrolled independently.
-                    VStack(alignment: .leading, spacing: 16) {
-                        if let error = store.microphoneError ?? store.websocketError {
-                            ErrorBanner(message: error)
-                        }
-                        MeetingContextField()
-                        HStack(alignment: .top, spacing: 18) {
-                            ScrollView {
-                                LiveAnswersView()
-                                    .padding(.bottom, 28)
-                            }
-                            .scrollContentBackground(.hidden)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                            ScrollView {
-                                TranscriptView()
-                                    .padding(.bottom, 28)
-                            }
-                            .scrollContentBackground(.hidden)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-                        }
-                    }
-                    .padding(.horizontal, 28)
-                    .padding(.top, 4)
+                switch store.mainTab {
+                case .notes:
+                    // Independent of the listening pipeline — capture and
+                    // answers keep running while notes are shown.
+                    NotesView()
+                case .session:
+                    sessionArea
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var sessionArea: some View {
+        if store.backendStatusLoaded, store.backendUnavailable || !store.backendReady {
+            BackendUnavailableView()
+        } else if store.currentText.isEmpty && !store.isListening && store.answeredQuestions.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                MeetingContextField()
+                    .padding(.horizontal, 28)
+                    .padding(.top, 4)
+                EmptySessionView()
+            }
+        } else {
+            // Two-column session layout: answers on the left,
+            // the live transcript on the right, scrolled independently.
+            VStack(alignment: .leading, spacing: 16) {
+                if let error = store.microphoneError ?? store.websocketError {
+                    ErrorBanner(message: error)
+                }
+                MeetingContextField()
+                HStack(alignment: .top, spacing: 18) {
+                    ScrollView {
+                        LiveAnswersView()
+                            .padding(.bottom, 28)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                    ScrollView {
+                        TranscriptView()
+                            .padding(.bottom, 28)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 4)
         }
     }
 }
@@ -121,6 +133,15 @@ struct MainTopBar: View {
 
             Text(settings.displayName)
                 .font(.system(size: 26, weight: .bold))
+
+            Picker("", selection: $store.mainTab) {
+                Text("Сессия").tag(MainTab.session)
+                Text("Заметки").tag(MainTab.notes)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(.leading, 12)
 
             Spacer()
 

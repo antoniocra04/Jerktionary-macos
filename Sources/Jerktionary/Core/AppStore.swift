@@ -42,6 +42,10 @@ final class AppStore: ObservableObject {
     @Published var overlayMode = false
     @Published var contentProtectionEnabled = true
     @Published var sidebarVisible = true
+    /// Which main working area is shown. Purely a view switch: the listening
+    /// pipeline (audio + WebSocket + answer streams) runs in this store and is
+    /// unaffected, so transcription and answers keep going in the Notes tab.
+    @Published var mainTab: MainTab = .session
     /// Meeting opened from the sidebar history (shown as an in-window modal).
     @Published var selectedMeeting: MeetingRecord?
 
@@ -51,6 +55,7 @@ final class AppStore: ObservableObject {
 
     let settings: AppSettings
     let meetings: MeetingsStore
+    let notes: NotesStore
     lazy var answers = AnswerStreamManager(store: self)
     lazy var explanations = ExplanationManager(store: self)
 
@@ -67,6 +72,7 @@ final class AppStore: ObservableObject {
     init(settings: AppSettings) {
         self.settings = settings
         self.meetings = MeetingsStore()
+        self.notes = NotesStore()
         startBackendStatusPolling()
     }
 
