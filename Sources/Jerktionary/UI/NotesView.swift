@@ -9,8 +9,14 @@ struct NotesView: View {
 
     private var notes: [Note] { store.notes.notes }
 
-    private var selectedNote: Note? {
-        notes.first { $0.id == selectedID }
+    /// A binding straight to the note in the store, so the editor and the list
+    /// share one source of truth — the title updates in the list as you type.
+    private func binding(for id: String) -> Binding<Note>? {
+        guard store.notes.notes.contains(where: { $0.id == id }) else { return nil }
+        return Binding(
+            get: { store.notes.notes.first { $0.id == id } ?? Note.new() },
+            set: { store.notes.update($0) }
+        )
     }
 
     var body: some View {
@@ -19,9 +25,9 @@ struct NotesView: View {
                 .frame(width: 260)
 
             Group {
-                if let note = selectedNote {
-                    NoteEditor(note: note)
-                        .id(note.id)
+                if let selectedID, let noteBinding = binding(for: selectedID) {
+                    NoteEditor(note: noteBinding)
+                        .id(selectedID)
                 } else {
                     emptyEditor
                 }
@@ -33,7 +39,9 @@ struct NotesView: View {
         .padding(.bottom, 28)
         .onAppear {
             store.notes.load()
-            if selectedID == nil { selectedID = notes.first?.id }
+            if selectedID == nil || !notes.contains(where: { $0.id == selectedID }) {
+                selectedID = notes.first?.id
+            }
         }
     }
 
@@ -128,29 +136,23 @@ private struct NoteRow: View {
     }
 }
 
-/// Title + body editor. Writes back to the store on every change (debounced by
-/// the store, which just re-sorts and persists).
+/// Title + body editor bound directly to the store's note — no local copy, so
+/// there's a single source of truth and edits always land on the right note.
 private struct NoteEditor: View {
-    @EnvironmentObject private var store: AppStore
-    let note: Note
-
-    @State private var title: String = ""
-    @State private var body_: String = ""
+    @Binding var note: Note
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("Заголовок", text: $title)
+            TextField("Заголовок", text: $note.title)
                 .textFieldStyle(.plain)
                 .font(.title2.weight(.bold))
-                .onChange(of: title) { _, _ in save() }
 
             Divider()
 
-            TextEditor(text: $body_)
+            TextEditor(text: $note.body)
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onChange(of: body_) { _, _ in save() }
 
             HStack {
                 Spacer()
@@ -160,16 +162,5 @@ private struct NoteEditor: View {
             }
         }
         .journalCard(padding: 18)
-        .onAppear {
-            title = note.title
-            body_ = note.body
-        }
-    }
-
-    private func save() {
-        var updated = note
-        updated.title = title
-        updated.body = body_
-        store.notes.update(updated)
     }
 }
