@@ -31,7 +31,9 @@ struct LiveAnswersView: View {
             }
         }
         .background(ArrowKeyMonitor(
-            enabled: total > 1,
+            // The session area stays mounted while the Notes tab is shown, so
+            // only arm the arrow monitor when the session is actually visible.
+            enabled: total > 1 && store.mainTab == .session,
             onOlder: { move(+1) },
             onNewer: { move(-1) }
         ))

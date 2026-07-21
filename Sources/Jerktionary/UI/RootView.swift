@@ -58,19 +58,22 @@ struct MainView: View {
 
     @ViewBuilder
     private var contentArea: some View {
-        ZStack {
-            VStack(alignment: .leading, spacing: 0) {
-                MainTopBar()
+        VStack(alignment: .leading, spacing: 0) {
+            MainTopBar()
 
-                switch store.mainTab {
-                case .notes:
-                    // Independent of the listening pipeline — capture and
-                    // answers keep running while notes are shown.
-                    NotesView()
-                case .session:
-                    sessionArea
-                }
+            // Both areas stay mounted; switching only toggles visibility, so the
+            // open note and scroll positions survive a round-trip to the session.
+            // The listening pipeline runs in the store regardless of the tab.
+            ZStack {
+                sessionArea
+                    .opacity(store.mainTab == .session ? 1 : 0)
+                    .allowsHitTesting(store.mainTab == .session)
+
+                NotesView()
+                    .opacity(store.mainTab == .notes ? 1 : 0)
+                    .allowsHitTesting(store.mainTab == .notes)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
