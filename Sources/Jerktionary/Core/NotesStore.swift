@@ -78,6 +78,11 @@ final class NotesStore: ObservableObject {
     /// list position — the selection can't desync onto the wrong note.
     func update(_ note: Note) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
+        let existing = notes[index]
+        // Only an actual content change reorders. Focusing a field writes back
+        // the same value; without this guard the note would jump to the top on
+        // focus alone, before any editing.
+        guard existing.title != note.title || existing.body != note.body else { return }
         var updated = note
         updated.updatedAt = Date.now.timeIntervalSince1970 * 1000
         notes[index] = updated
