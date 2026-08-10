@@ -17,6 +17,7 @@ struct JerktionaryApp: App {
             RootView()
                 .environmentObject(settings)
                 .environmentObject(store)
+                .environmentObject(store.notes)
                 .onAppear {
                     appDelegate.configure(store: store)
                 }

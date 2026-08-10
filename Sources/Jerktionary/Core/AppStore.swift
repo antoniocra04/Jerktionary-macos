@@ -23,7 +23,6 @@ final class AppStore: ObservableObject {
     @Published private(set) var terms: [TranscriptTerm] = []
     @Published private(set) var connectionStatus: WsConnectionStatus = .disconnected
     @Published private(set) var isListening = false
-    @Published var microphoneLevel: Double = 0
     @Published private(set) var answeredQuestions: [String] = []
     @Published private(set) var sessionAnswers: [SessionAnswer] = []
     @Published private(set) var lastExplanations: [LastExplanation] = []
@@ -56,6 +55,9 @@ final class AppStore: ObservableObject {
     let settings: AppSettings
     let meetings: MeetingsStore
     let notes: NotesStore
+    /// Not `@Published`: see AudioLevelModel — the meter observes it directly so
+    /// the ~12 Hz level updates don't invalidate the rest of the UI.
+    let audioLevel = AudioLevelModel()
     lazy var answers = AnswerStreamManager(store: self)
     lazy var explanations = ExplanationManager(store: self)
 
@@ -117,7 +119,7 @@ final class AppStore: ObservableObject {
         systemCapture = nil
         wsClient?.disconnect()
         wsClient = nil
-        microphoneLevel = 0
+        audioLevel.level = 0
 
         // Archive the finished meeting; failures must not break stopping.
         if let record = buildMeetingRecord() {
@@ -154,7 +156,7 @@ final class AppStore: ObservableObject {
                 Task { @MainActor in self?.wsClient?.sendAudioChunk(data) }
             },
             onLevel: { [weak self] level in
-                Task { @MainActor in self?.microphoneLevel = level }
+                Task { @MainActor in self?.audioLevel.level = level }
             }
         )
     }
@@ -167,7 +169,7 @@ final class AppStore: ObservableObject {
                 Task { @MainActor in self?.wsClient?.sendAudioChunk(data) }
             },
             onLevel: { [weak self] level in
-                Task { @MainActor in self?.microphoneLevel = level }
+                Task { @MainActor in self?.audioLevel.level = level }
             },
             onStopError: { [weak self] message in
                 Task { @MainActor in self?.microphoneError = message }
@@ -271,7 +273,7 @@ final class AppStore: ObservableObject {
         answeredQuestions = []
         sessionAnswers = []
         meetingStartedAt = .now
-        microphoneLevel = 0
+        audioLevel.level = 0
         websocketError = nil
         microphoneError = nil
         answers.resetSession()

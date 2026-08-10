@@ -1,20 +1,13 @@
 import SwiftUI
 
-/// Notes working area. A thin wrapper that hands the nested NotesStore to a
-/// body that observes it directly — otherwise, since NotesView only watches
-/// AppStore, changes to the nested store's notes wouldn't refresh the list.
-struct NotesView: View {
-    @EnvironmentObject private var store: AppStore
-
-    var body: some View {
-        NotesBody(notesStore: store.notes)
-    }
-}
-
 /// List of notes on the left, the editor on the right. Independent of the
 /// listening pipeline — transcription and answers keep running here.
-private struct NotesBody: View {
-    @ObservedObject var notesStore: NotesStore
+///
+/// Observes NotesStore directly instead of reaching through AppStore: both tabs
+/// stay mounted, so an AppStore subscription meant every transcript and
+/// microphone update re-rendered the whole editor behind the session view.
+struct NotesView: View {
+    @EnvironmentObject private var notesStore: NotesStore
     @State private var selectedID: String?
 
     private var notes: [Note] { notesStore.notes }

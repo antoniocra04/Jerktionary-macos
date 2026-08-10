@@ -27,9 +27,13 @@ struct ListenButton: View {
     }
 }
 
+/// Observes AudioLevelModel directly rather than taking the level as a value,
+/// so the ~12 Hz updates redraw the meter and nothing else.
 struct LevelMeterView: View {
-    let level: Double
+    @ObservedObject var model: AudioLevelModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var level: Double { model.level }
 
     var body: some View {
         GeometryReader { geometry in

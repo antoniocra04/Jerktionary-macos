@@ -149,7 +149,7 @@ struct MainTopBar: View {
             Spacer()
 
             if store.isListening {
-                LevelMeterView(level: store.microphoneLevel)
+                LevelMeterView(model: store.audioLevel)
                     .padding(.trailing, 6)
             }
 
