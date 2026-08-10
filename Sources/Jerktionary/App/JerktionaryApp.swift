@@ -17,7 +17,13 @@ struct JerktionaryApp: App {
             RootView()
                 .environmentObject(settings)
                 .environmentObject(store)
+                // The nested stores are injected in their own right: views that
+                // read them need to observe them, not rely on AppStore churn to
+                // be re-rendered.
                 .environmentObject(store.notes)
+                .environmentObject(store.meetings)
+                .environmentObject(store.answers)
+                .environmentObject(store.explanations)
                 .onAppear {
                     appDelegate.configure(store: store)
                 }

@@ -69,10 +69,12 @@ struct TranscriptView: View {
 
 struct TermExplanationPopover: View {
     @EnvironmentObject private var store: AppStore
+    /// Observed directly — the streamed explanation is published here.
+    @EnvironmentObject private var explanations: ExplanationManager
     let term: TranscriptTerm
 
     var body: some View {
-        let state = store.explanations.state(term: term.normalized)
+        let state = explanations.state(term: term.normalized)
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(state.explanation?.title.isEmpty == false ? state.explanation!.title : term.text)
@@ -109,7 +111,7 @@ struct TermExplanationPopover: View {
         .padding(16)
         .frame(width: 360, alignment: .leading)
         .onAppear {
-            store.explanations.fetchStreaming(term: term.normalized, context: store.currentText)
+            explanations.fetchStreaming(term: term.normalized, context: store.currentText)
         }
     }
 

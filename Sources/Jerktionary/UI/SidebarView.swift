@@ -4,25 +4,27 @@ import SwiftUI
 /// journals list), then live terms and recent explanations during a session.
 struct SidebarView: View {
     @EnvironmentObject private var store: AppStore
+    /// Observed directly: the list is published here, not on AppStore.
+    @EnvironmentObject private var meetings: MeetingsStore
 
     var body: some View {
         sidebarContent
             .modifier(LiquidGlassPanel())
-            .onAppear { store.meetings.load() }
+            .onAppear { meetings.load() }
     }
 
     private var sidebarContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 section("Встречи") {
-                    if store.meetings.meetings.isEmpty {
+                    if meetings.meetings.isEmpty {
                         Text("Прошедшие встречи появятся здесь")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.leading, 2)
                     } else {
                         VStack(spacing: 4) {
-                            ForEach(store.meetings.meetings) { meeting in
+                            ForEach(meetings.meetings) { meeting in
                                 MeetingRow(meeting: meeting) {
                                     store.selectedMeeting = meeting
                                 }
@@ -87,7 +89,7 @@ private struct LiquidGlassPanel: ViewModifier {
 
 /// One meeting in the sidebar list — a quiet row, Journal's journals-list style.
 private struct MeetingRow: View {
-    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var meetings: MeetingsStore
     let meeting: MeetingRecord
     let open: () -> Void
     @State private var hovering = false
@@ -115,7 +117,7 @@ private struct MeetingRow: View {
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Удалить", role: .destructive) {
-                store.meetings.delete(meeting.id)
+                meetings.delete(meeting.id)
             }
         }
     }

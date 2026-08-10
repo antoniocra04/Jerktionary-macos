@@ -163,13 +163,16 @@ private struct ArrowKeyMonitor: NSViewRepresentable {
 
 struct AnswerCardView: View {
     @EnvironmentObject private var store: AppStore
+    /// Observed directly: the streamed answer lives on this object, and reading
+    /// it through AppStore would not subscribe the card to its updates.
+    @EnvironmentObject private var answers: AnswerStreamManager
     let question: String
     var latest = false
     @State private var deep = false
     @State private var copied = false
 
     var body: some View {
-        let state = store.answers.state(question: question, deep: deep)
+        let state = answers.state(question: question, deep: deep)
 
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
@@ -193,7 +196,7 @@ struct AnswerCardView: View {
                     .font(.callout)
                     .foregroundStyle(.red)
                 Button {
-                    store.answers.regenerate(question: question, deep: deep, context: store.currentText)
+                    answers.regenerate(question: question, deep: deep, context: store.currentText)
                 } label: {
                     Label("Попробовать ещё раз", systemImage: "arrow.counterclockwise")
                 }
@@ -237,7 +240,7 @@ struct AnswerCardView: View {
                     Button(deep ? "Короче" : "Подробнее") {
                         deep.toggle()
                         if deep {
-                            store.answers.ensureStream(question: question, deep: true, context: store.currentText)
+                            answers.ensureStream(question: question, deep: true, context: store.currentText)
                         }
                     }
                     Button {
@@ -248,7 +251,7 @@ struct AnswerCardView: View {
                     }
                     if !state.streaming {
                         Button {
-                            store.answers.regenerate(question: question, deep: deep, context: store.currentText)
+                            answers.regenerate(question: question, deep: deep, context: store.currentText)
                         } label: {
                             Label("Перегенерировать", systemImage: "arrow.counterclockwise")
                         }
