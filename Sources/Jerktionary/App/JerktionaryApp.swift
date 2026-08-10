@@ -66,6 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeys.unregisterAll()
+        // Backstop for the editor's own flush: notes are written on a debounce
+        // off the main thread, and nothing else waits for that write.
+        MainActor.assumeIsolated {
+            store?.notes.flushPendingWrites()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

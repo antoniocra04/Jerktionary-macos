@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// List of notes on the left, the editor on the right. Independent of the
@@ -12,24 +13,14 @@ struct NotesView: View {
 
     private var notes: [Note] { notesStore.notes }
 
-    /// A binding straight to the note in the store, so the editor and the list
-    /// share one source of truth — the title updates in the list as you type.
-    private func binding(for id: String) -> Binding<Note>? {
-        guard notesStore.notes.contains(where: { $0.id == id }) else { return nil }
-        return Binding(
-            get: { notesStore.notes.first { $0.id == id } ?? Note.new() },
-            set: { notesStore.update($0) }
-        )
-    }
-
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
             noteList
                 .frame(width: 260)
 
             Group {
-                if let selectedID, let noteBinding = binding(for: selectedID) {
-                    NoteEditor(note: noteBinding)
+                if let selectedID, let note = notesStore.note(id: selectedID) {
+                    NoteEditor(noteID: selectedID, initialBody: note.body)
                         .id(selectedID)
                 } else {
                     emptyEditor
@@ -73,7 +64,7 @@ struct NotesView: View {
                     .padding(.top, 8)
             } else {
                 ScrollView {
-                    VStack(spacing: 4) {
+                    LazyVStack(spacing: 4) {
                         ForEach(notes) { note in
                             NoteRow(note: note, selected: note.id == selectedID) {
                                 selectedID = note.id
@@ -141,17 +132,62 @@ private struct NoteRow: View {
     }
 }
 
-/// Title + body editor bound directly to the store's note — a single source of
-/// truth, so edits always land on the right note and the list reflects them live.
+/// The in-progress body of the open note, held outside SwiftUI's state graph on
+/// purpose: writing the whole document into `@State` or `@Published` on every
+/// keystroke costs time proportional to its length. Mutating a plain reference
+/// type doesn't invalidate anything, so typing does no SwiftUI work at all.
+@MainActor
+private final class NoteDraft {
+    var text = ""
+    var commitTask: Task<Void, Never>?
+}
+
+/// Title + body editor for one note, addressed by id so a commit always lands on
+/// the right note no matter how the list has re-sorted underneath.
 /// The body supports Markdown via an edit/preview toggle.
+///
+/// Edits land in `draft` as they happen and are committed to the store on a
+/// short debounce — the store publish is what re-renders the list, so it must
+/// not happen per keystroke. Every way out of the editor flushes first.
 private struct NoteEditor: View {
-    @Binding var note: Note
+    @EnvironmentObject private var notesStore: NotesStore
+    let noteID: String
+
+    @State private var draft: NoteDraft
     @State private var preview = false
+
+    /// Long enough to coalesce a burst of typing, short enough that the title in
+    /// the list and the move-to-top reorder still read as live.
+    private static let commitDebounceNanos: UInt64 = 250_000_000
+
+    /// The draft is seeded here rather than in `.task`, which would run after the
+    /// text view had already been made with an empty document.
+    init(noteID: String, initialBody: String) {
+        self.noteID = noteID
+        let draft = NoteDraft()
+        draft.text = initialBody
+        _draft = State(initialValue: draft)
+    }
+
+    private var note: Note? { notesStore.note(id: noteID) }
+
+    /// The title is short, so it commits on every keystroke and keeps the list
+    /// title live; only the body pays the debounce.
+    private var titleBinding: Binding<String> {
+        Binding(
+            get: { notesStore.note(id: noteID)?.title ?? "" },
+            set: { newValue in
+                guard var current = notesStore.note(id: noteID), current.title != newValue else { return }
+                current.title = newValue
+                notesStore.update(current)
+            }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                TextField("Заголовок", text: $note.title)
+                TextField("Заголовок", text: titleBinding)
                     .textFieldStyle(.plain)
                     .font(.title2.weight(.bold))
 
@@ -170,12 +206,12 @@ private struct NoteEditor: View {
             if preview {
                 ScrollView {
                     Group {
-                        if note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text("Пусто. Переключитесь в режим ✎, чтобы писать. Поддерживается Markdown.")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         } else {
-                            MarkdownView(text: note.body)
+                            MarkdownView(text: draft.text)
                                 .textSelection(.enabled)
                         }
                     }
@@ -185,10 +221,15 @@ private struct NoteEditor: View {
                 .scrollContentBackground(.hidden)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
-                TextEditor(text: $note.body)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                NoteTextEditor(
+                    documentID: noteID,
+                    initialText: draft.text,
+                    onEdit: { text in
+                        draft.text = text
+                        scheduleCommit()
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             HStack {
@@ -196,11 +237,43 @@ private struct NoteEditor: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
-                Text("Изменено \(NotesStore.formatDate(note.updatedAt))")
+                Text("Изменено \(NotesStore.formatDate(note?.updatedAt ?? 0))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
         .journalCard(padding: 18)
+        // Every way the editor can stop being the thing you're typing into.
+        .onDisappear { commit(flushToDisk: true) }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+            commit(flushToDisk: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            commit(flushToDisk: true)
+        }
+    }
+
+    private func scheduleCommit() {
+        draft.commitTask?.cancel()
+        draft.commitTask = Task { [draft] in
+            try? await Task.sleep(nanoseconds: Self.commitDebounceNanos)
+            guard !Task.isCancelled else { return }
+            draft.commitTask = nil
+            commit()
+        }
+    }
+
+    /// Re-reads the note instead of using a captured copy: the title commits on
+    /// its own path, and the note may have been deleted while we were typing.
+    private func commit(flushToDisk: Bool = false) {
+        draft.commitTask?.cancel()
+        draft.commitTask = nil
+        if var current = notesStore.note(id: noteID), current.body != draft.text {
+            current.body = draft.text
+            notesStore.update(current)
+        }
+        if flushToDisk {
+            notesStore.flushPendingWrites()
+        }
     }
 }

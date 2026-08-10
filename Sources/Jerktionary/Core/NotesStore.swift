@@ -26,16 +26,26 @@ struct Note: Codable, Identifiable, Hashable {
         )
     }
 
+    /// How far into the body to look for a title line, and how long the result
+    /// may get. Both are bounds against pasted text: this runs for every visible
+    /// row on every list rebuild, and splitting a few hundred KB of body — then
+    /// handing the result to a single-line `Text` — cost milliseconds per row.
+    static let titleScanLimit = 200
+    static let titleLengthLimit = 80
+
     /// First non-empty line as a display title, falling back to a placeholder.
+    /// Only the first `titleScanLimit` characters are considered, so a note that
+    /// opens with more blank space than that shows the placeholder instead.
     var displayTitle: String {
         if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return title
+            return String(title.prefix(Self.titleLengthLimit))
         }
         let firstLine = body
+            .prefix(Self.titleScanLimit)
             .split(separator: "\n", omittingEmptySubsequences: true)
             .first
-            .map(String.init) ?? ""
-        return firstLine.isEmpty ? "Новая заметка" : firstLine
+            .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        return firstLine.isEmpty ? "Новая заметка" : String(firstLine.prefix(Self.titleLengthLimit))
     }
 }
 
@@ -43,6 +53,12 @@ struct Note: Codable, Identifiable, Hashable {
 @MainActor
 final class NotesStore: ObservableObject {
     @Published private(set) var notes: [Note] = []
+
+    /// Writes are debounced and run off the main thread: `update` is called as
+    /// the user types, and encoding the whole archive on every edit stalled input.
+    private static let persistDebounceNanos: UInt64 = 400_000_000
+    private let ioQueue = DispatchQueue(label: "com.jerktionary.notes.io", qos: .utility)
+    private var persistTask: Task<Void, Never>?
 
     private var storeURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -64,12 +80,16 @@ final class NotesStore: ObservableObject {
         notes = parsed.sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    func note(id: String) -> Note? {
+        notes.first { $0.id == id }
+    }
+
     /// Creates an empty note at the top and returns it for immediate editing.
     @discardableResult
     func create() -> Note {
         let note = Note.new()
         notes.insert(note, at: 0)
-        persist()
+        persistNow()
         return note
     }
 
@@ -87,23 +107,51 @@ final class NotesStore: ObservableObject {
         updated.updatedAt = Date.now.timeIntervalSince1970 * 1000
         notes[index] = updated
         notes.sort { $0.updatedAt > $1.updatedAt }
-        persist()
+        schedulePersist()
     }
 
     func delete(_ id: String) {
         notes.removeAll { $0.id == id }
-        persist()
+        persistNow()
     }
 
-    private func persist() {
-        do {
-            let directory = storeURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted]
-            try encoder.encode(notes).write(to: storeURL)
-        } catch {
-            NSLog("Jerktionary: failed to persist notes: \(error)")
+    /// Commits any debounced write and blocks until it has reached the disk.
+    /// Call before the app quits or loses focus — nothing else waits for the
+    /// background write, so this is the only guarantee that edits survive.
+    func flushPendingWrites() {
+        if persistTask != nil {
+            persistNow()
+        }
+        ioQueue.sync {}
+    }
+
+    private func schedulePersist() {
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.persistDebounceNanos)
+            guard !Task.isCancelled, let self else { return }
+            self.persistNow()
+        }
+    }
+
+    private func persistNow() {
+        persistTask?.cancel()
+        persistTask = nil
+        // The serial queue keeps writes ordered, so the newest snapshot wins.
+        let snapshot = notes
+        let url = storeURL
+        ioQueue.async {
+            do {
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted]
+                try encoder.encode(snapshot).write(to: url, options: .atomic)
+            } catch {
+                NSLog("Jerktionary: failed to persist notes: \(error)")
+            }
         }
     }
 

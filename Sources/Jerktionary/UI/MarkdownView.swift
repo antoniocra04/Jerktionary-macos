@@ -7,8 +7,11 @@ import SwiftUI
 struct MarkdownView: View {
     let text: String
 
+    /// Lazy on purpose: every block measures itself with `fixedSize` and parses
+    /// its own inline markdown, so an eager stack laid out the whole note — all
+    /// of it off-screen — before the first line could be drawn.
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        LazyVStack(alignment: .leading, spacing: 10) {
             let blocks = MarkdownParser.parse(text)
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 view(for: block)
