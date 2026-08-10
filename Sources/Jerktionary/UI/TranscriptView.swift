@@ -20,50 +20,25 @@ struct TranscriptView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 110, alignment: .center)
                     .journalCard()
+                Spacer(minLength: 0)
             } else {
-                highlightedText
-                    .journalCard()
-                    .popover(item: $selectedTerm) { term in
-                        TermExplanationPopover(term: term)
+                // The text view scrolls itself, so the card fills the column
+                // instead of growing with the transcript.
+                TranscriptTextView(
+                    text: store.currentText,
+                    terms: store.terms,
+                    onTermTap: { term in
+                        selectedTerm = term
+                        store.explanations.fetchStreaming(term: term.normalized, context: store.currentText)
                     }
-            }
-        }
-    }
-
-    /// Terms are rendered as underline+tint runs inside one Text; taps resolve
-    /// via an invisible layout of segment views is overkill — use a flow of
-    /// Texts with tap gestures per segment instead.
-    private var highlightedText: some View {
-        let segments = TermMerger.highlightSegments(text: store.currentText, terms: store.terms)
-        // AttributedString supports links; use a custom scheme to catch term taps.
-        var attributed = AttributedString()
-        for segment in segments {
-            switch segment {
-            case .text(let text, _):
-                attributed += AttributedString(text)
-            case .term(let text, let term):
-                var run = AttributedString(text)
-                run.foregroundColor = .accentColor
-                run.underlineStyle = .single
-                if let url = URL(string: "jerktionary-term://\(term.id.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) ?? "")") {
-                    run.link = url
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .journalCard()
+                .popover(item: $selectedTerm) { term in
+                    TermExplanationPopover(term: term)
                 }
-                attributed += run
             }
         }
-        return Text(attributed)
-            .font(.body)
-            .lineSpacing(4)
-            .textSelection(.enabled)
-            .environment(\.openURL, OpenURLAction { url in
-                guard url.scheme == "jerktionary-term",
-                      let host = url.host?.removingPercentEncoding,
-                      let term = store.terms.first(where: { $0.id == host })
-                else { return .discarded }
-                selectedTerm = term
-                store.explanations.fetchStreaming(term: term.normalized, context: store.currentText)
-                return .handled
-            })
     }
 }
 

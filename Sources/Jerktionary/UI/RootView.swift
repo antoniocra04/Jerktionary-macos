@@ -104,12 +104,11 @@ struct MainView: View {
                     .scrollContentBackground(.hidden)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
 
-                    ScrollView {
-                        TranscriptView()
-                            .padding(.bottom, 28)
-                    }
-                    .scrollContentBackground(.hidden)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    // No outer ScrollView: the transcript scrolls inside its own
+                    // text view, which is what keeps its layout cost bounded.
+                    TranscriptView()
+                        .padding(.bottom, 28)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             }
             .padding(.horizontal, 28)

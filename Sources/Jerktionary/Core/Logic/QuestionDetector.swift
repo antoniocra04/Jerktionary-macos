@@ -8,6 +8,18 @@ enum QuestionDetector {
         options: [.caseInsensitive]
     )
 
+    /// How much of the end of the transcript the detectors look at.
+    ///
+    /// A question can only be at the end, but the transcript runs for the whole
+    /// meeting: scanning all of it character by character cost 5 ms at 100k
+    /// characters, and `scheduleQuestionDetection` does it twice per update.
+    /// `suffix` walks back from the end, so this is O(window), not O(transcript).
+    private static let scanWindow = 2_000
+
+    private static func tail(_ text: String) -> String {
+        String(text.suffix(scanWindow))
+    }
+
     static func splitSentences(_ text: String) -> [String] {
         // Split after sentence-ending punctuation followed by whitespace.
         var sentences: [String] = []
@@ -32,8 +44,9 @@ enum QuestionDetector {
     /// The most recent question: the last "?" sentence, or the trailing sentence
     /// when it starts with an interrogative/imperative phrase.
     static func latestQuestion(in text: String) -> String? {
-        guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        let sentences = splitSentences(text)
+        let window = tail(text)
+        guard !window.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        let sentences = splitSentences(window)
 
         for sentence in sentences.reversed() where sentence.hasSuffix("?") {
             return sentence
@@ -50,7 +63,7 @@ enum QuestionDetector {
     /// Up to two trailing sentences for the manual "answer now" hotkey, so a
     /// question split across a pause is still whole.
     static func forcedQuestion(in text: String) -> String? {
-        let sentences = splitSentences(text)
+        let sentences = splitSentences(tail(text))
         guard !sentences.isEmpty else { return nil }
         let forced = trimTrailingPunctuation(sentences.suffix(2).joined(separator: " "))
         return forced.isEmpty ? nil : forced
@@ -58,7 +71,7 @@ enum QuestionDetector {
 
     /// The single last sentence, for the full-context hotkey.
     static func lastSentence(in text: String) -> String? {
-        let sentences = splitSentences(text)
+        let sentences = splitSentences(tail(text))
         guard let last = sentences.last else { return nil }
         let cleaned = last.replacingOccurrences(of: "[.…!?]+$", with: "", options: .regularExpression)
         return cleaned.isEmpty ? nil : cleaned
