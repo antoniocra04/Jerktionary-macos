@@ -95,8 +95,15 @@ struct ChatCapabilities: Equatable {
     var provider: String = ""
     var label: String = ""
     var defaultModel: String = ""
+    /// The model these capabilities describe.
+    var model: String = ""
     var reasoningLevels: [String] = []
+    /// nil when the provider publishes no modality metadata — not a "no".
+    var acceptsImages: Bool?
     var ready: Bool = false
+
+    /// Only a definite no blocks attachments; silence leaves it to the provider.
+    var refusesImages: Bool { acceptsImages == false }
 }
 
 /// Conversations archive plus the live streaming state, stored next to
@@ -178,9 +185,12 @@ final class ChatStore: ObservableObject {
 
     // MARK: - Capabilities
 
-    func refreshCapabilities(client: BackendClient) async {
+    /// Capabilities differ per model on some providers — the reasoning levels
+    /// and whether images are accepted both do on makora — so this is refetched
+    /// whenever the selected model changes, not just at launch.
+    func refreshCapabilities(client: BackendClient, model: String = "") async {
         do {
-            capabilities = try await client.chatCapabilities()
+            capabilities = try await client.chatCapabilities(model: model)
         } catch {
             capabilities = ChatCapabilities()
         }
@@ -320,7 +330,9 @@ final class ChatStore: ObservableObject {
             case "LLM_UNAVAILABLE":
                 return "LLM недоступна. Проверьте, что backend запущен с рабочим провайдером."
             case "LLM_BAD_RESPONSE":
-                return "Провайдер вернул ошибку. Возможно, модель не принимает изображения или выбранный уровень ризонинга."
+                // The backend forwards the provider's own words — "model X is not
+                // multimodal" is actionable in a way a generic message is not.
+                return backend.message
             default:
                 return backend.message
             }

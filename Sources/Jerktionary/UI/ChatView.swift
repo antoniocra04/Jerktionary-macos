@@ -173,6 +173,19 @@ private struct ChatThreadView: View {
             composer
         }
         .journalCard(padding: 18)
+        .task(id: conversation?.model ?? "") {
+            await chatStore.refreshCapabilities(
+                client: store.backendClient,
+                model: conversation?.model ?? ""
+            )
+            // A level valid for the previous model may not exist on this one, and
+            // sending an unknown effort fails the whole request.
+            let levels = chatStore.capabilities.reasoningLevels
+            if let current = conversation?.reasoningEffort,
+               !current.isEmpty, !levels.contains(current) {
+                chatStore.updateSettings(id: conversationID, reasoningEffort: "")
+            }
+        }
     }
 
     // MARK: Header — model and reasoning
@@ -294,6 +307,16 @@ private struct ChatThreadView: View {
                     .foregroundStyle(.red)
             }
 
+            if chatStore.capabilities.refusesImages, !draft.attachments.isEmpty {
+                Label(
+                    "Модель \(chatStore.capabilities.model) не принимает изображения — выберите другую в списке моделей.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
             if !draft.attachments.isEmpty {
                 AttachmentStrip(attachments: draft.attachments, tick: attachmentTick) { id in
                     draft.attachments.removeAll { $0.id == id }
@@ -350,6 +373,11 @@ private struct ChatThreadView: View {
     }
 
     private func submit() {
+        if chatStore.capabilities.refusesImages, !draft.attachments.isEmpty {
+            attachmentError =
+                "Модель \(chatStore.capabilities.model) работает только с текстом. Уберите изображения или смените модель."
+            return
+        }
         chatStore.send(
             conversationID: conversationID,
             text: draft.text,

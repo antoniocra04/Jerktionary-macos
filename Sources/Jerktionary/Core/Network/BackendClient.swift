@@ -146,20 +146,27 @@ struct BackendClient {
         }
     }
 
-    func chatCapabilities() async throws -> ChatCapabilities {
+    func chatCapabilities(model: String = "") async throws -> ChatCapabilities {
         struct ResponseDto: Decodable {
             let provider: String
             let label: String
             let default_model: String
+            let model: String
             let reasoning_levels: [String]
+            let accepts_images: Bool?
             let ready: Bool
         }
-        let dto: ResponseDto = try await getJSON("/api/chat/capabilities")
+        let query = model.isEmpty
+            ? ""
+            : "?model=\(model.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        let dto: ResponseDto = try await getJSON("/api/chat/capabilities\(query)")
         return ChatCapabilities(
             provider: dto.provider,
             label: dto.label,
             defaultModel: dto.default_model,
+            model: dto.model,
             reasoningLevels: dto.reasoning_levels,
+            acceptsImages: dto.accepts_images,
             ready: dto.ready
         )
     }
@@ -168,6 +175,8 @@ struct BackendClient {
         var delta: String?
         var done: Bool?
         var error: String?
+        /// The provider's own explanation, when the backend could capture one.
+        var detail: String?
     }
 
     /// Streams `/api/chat/stream`, yielding text deltas as they arrive.
@@ -194,7 +203,11 @@ struct BackendClient {
         // maps to an empty string, which the caller appends harmlessly.
         return sseStream(path: "/api/chat/stream", body: body) { (snapshot: ChatSnapshot) in
             if let error = snapshot.error {
-                throw BackendError(message: "Чат вернул ошибку", status: 502, code: error)
+                throw BackendError(
+                    message: snapshot.detail ?? "Чат вернул ошибку",
+                    status: 502,
+                    code: error
+                )
             }
             return snapshot.delta ?? ""
         }
