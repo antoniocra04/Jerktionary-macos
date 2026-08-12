@@ -123,6 +123,14 @@ final class ChatStore: ObservableObject {
     /// Bumped at a fixed rate while streaming so the view redraws without every
     /// token invalidating the whole tree.
     @Published private(set) var streamTick = 0
+    /// The open conversation. Lives here rather than in the view because the
+    /// screenshot hotkey has to drop its image into the one being looked at.
+    @Published var selectedID: String?
+    /// Attachments handed in from outside the composer — currently the
+    /// screenshot hotkey. The open composer drains this into its own draft.
+    @Published var pendingAttachments: [ChatAttachment] = []
+    /// Shown by the chat tab when a capture failed; cleared once displayed.
+    @Published var transientError: String?
 
     /// The answer as it arrives. Read during a redraw; never published directly.
     private(set) var streamingText = ""
@@ -156,6 +164,7 @@ final class ChatStore: ObservableObject {
             return
         }
         conversations = parsed.sorted { $0.updatedAt > $1.updatedAt }
+        selectedID = conversations.first?.id
     }
 
     func conversation(id: String) -> Conversation? {
@@ -166,8 +175,22 @@ final class ChatStore: ObservableObject {
     func create() -> Conversation {
         let conversation = Conversation.new()
         conversations.insert(conversation, at: 0)
+        selectedID = conversation.id
         persistNow()
         return conversation
+    }
+
+    /// The conversation a screenshot or a new message should land in: whatever is
+    /// open, else the most recent, else a fresh one.
+    func currentOrNewConversation() -> Conversation {
+        if let selectedID, let existing = conversation(id: selectedID) {
+            return existing
+        }
+        if let first = conversations.first {
+            selectedID = first.id
+            return first
+        }
+        return create()
     }
 
     func delete(_ id: String) {
@@ -175,6 +198,9 @@ final class ChatStore: ObservableObject {
             cancelStreaming()
         }
         conversations.removeAll { $0.id == id }
+        if selectedID == id {
+            selectedID = conversations.first?.id
+        }
         persistNow()
     }
 

@@ -43,6 +43,10 @@ final class AppSettings: ObservableObject {
     @AppStorage("settings.chatModels") var chatModelsRaw = ""
     /// Optional system prompt prepended to every chat conversation.
     @AppStorage("settings.chatSystemPrompt") var chatSystemPrompt = ""
+    /// Asked automatically about a screenshot taken with Ctrl+Shift+S. Empty
+    /// leaves the shot in the composer so a question can be typed instead —
+    /// sending an image with no question usually wastes the request.
+    @AppStorage("settings.chatScreenshotPrompt") var chatScreenshotPrompt = ""
 
     var chatModels: [String] {
         chatModelsRaw

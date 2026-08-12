@@ -6,17 +6,20 @@ import Foundation
 ///   Ctrl+Shift+Space — answer now
 ///   Ctrl+Shift+O     — toggle overlay
 ///   Ctrl+Shift+Enter — full-context answer
+///   Ctrl+Shift+S     — screenshot a region into the chat
 final class GlobalHotkeys {
     enum Action: UInt32, CaseIterable {
         case answerNow = 1
         case toggleOverlay = 2
         case fullContextAnswer = 3
+        case screenshotToChat = 4
 
         var keyCode: UInt32 {
             switch self {
             case .answerNow: UInt32(kVK_Space)
             case .toggleOverlay: UInt32(kVK_ANSI_O)
             case .fullContextAnswer: UInt32(kVK_Return)
+            case .screenshotToChat: UInt32(kVK_ANSI_S)
             }
         }
     }

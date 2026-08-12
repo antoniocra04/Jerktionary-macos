@@ -70,6 +70,17 @@ struct SettingsView: View {
                 }
                 TextField("Системный промпт", text: $settings.chatSystemPrompt, axis: .vertical)
                     .lineLimit(2...6)
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField(
+                        "Вопрос к снимку экрана",
+                        text: $settings.chatScreenshotPrompt,
+                        axis: .vertical
+                    )
+                    .lineLimit(1...4)
+                    Text("Ctrl+Shift+S снимает область экрана. Если поле заполнено — снимок уходит с этим вопросом сразу, иначе просто кладётся в поле ввода.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             Section {

@@ -63,7 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.register([
             .answerNow: { [weak store] in store?.answerNow() },
             .toggleOverlay: { [weak store] in store?.toggleOverlay() },
-            .fullContextAnswer: { [weak store] in store?.fullContextAnswer() }
+            .fullContextAnswer: { [weak store] in store?.fullContextAnswer() },
+            .screenshotToChat: { [weak store] in store?.captureScreenshotToChat() }
         ])
 
         // Stealth by default, like the Electron app.
@@ -90,5 +91,49 @@ extension AppStore {
     func toggleOverlay() {
         overlayMode.toggle()
         WindowController.setOverlayMode(overlayMode)
+    }
+
+    /// Ctrl+Shift+S: pick a region of the screen and put it in the chat.
+    ///
+    /// Auto-sends only when a screenshot prompt is configured — an image with no
+    /// question is a wasted request — and never when the selected model can't
+    /// read images, in which case it is left in the composer with the warning
+    /// the chat tab already shows.
+    func captureScreenshotToChat() {
+        Task { @MainActor in
+            let attachment: ChatAttachment?
+            do {
+                attachment = try await ScreenshotCapture.captureRegion()
+            } catch {
+                chats.transientError = error.localizedDescription
+                mainTab = .chat
+                NSApp.activate(ignoringOtherApps: true)
+                return
+            }
+            guard let attachment else { return } // selection cancelled
+
+            let conversation = chats.currentOrNewConversation()
+            mainTab = .chat
+            NSApp.activate(ignoringOtherApps: true)
+
+            let prompt = settings.chatScreenshotPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !prompt.isEmpty else {
+                chats.pendingAttachments.append(attachment)
+                return
+            }
+
+            await chats.ensureCapabilities(client: backendClient, model: conversation.model)
+            guard !chats.capabilities.refusesImages else {
+                chats.pendingAttachments.append(attachment)
+                return
+            }
+            chats.send(
+                conversationID: conversation.id,
+                text: prompt,
+                attachments: [attachment],
+                client: backendClient,
+                systemPrompt: settings.chatSystemPrompt
+            )
+        }
     }
 }

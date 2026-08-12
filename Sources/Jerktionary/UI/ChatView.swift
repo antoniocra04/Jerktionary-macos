@@ -10,9 +10,9 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var store: AppStore
-    @State private var selectedID: String?
 
     private var conversations: [Conversation] { chatStore.conversations }
+    private var selectedID: String? { chatStore.selectedID }
 
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
@@ -37,7 +37,7 @@ struct ChatView: View {
         }
         .onAppear {
             if selectedID == nil || chatStore.conversation(id: selectedID ?? "") == nil {
-                selectedID = conversations.first?.id
+                chatStore.selectedID = conversations.first?.id
             }
         }
     }
@@ -49,7 +49,7 @@ struct ChatView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    selectedID = chatStore.create().id
+                    chatStore.create()
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
@@ -72,12 +72,9 @@ struct ChatView: View {
                                 conversation: conversation,
                                 selected: conversation.id == selectedID
                             ) {
-                                selectedID = conversation.id
+                                chatStore.selectedID = conversation.id
                             } onDelete: {
                                 chatStore.delete(conversation.id)
-                                if selectedID == conversation.id {
-                                    selectedID = chatStore.conversations.first?.id
-                                }
                             }
                         }
                     }
@@ -176,6 +173,19 @@ private struct ChatThreadView: View {
             composer
         }
         .journalCard(padding: 18)
+        .onChange(of: chatStore.pendingAttachments) {
+            // Handed over by the screenshot hotkey, which has no access to the
+            // draft; taking them here keeps one owner for the composer state.
+            guard !chatStore.pendingAttachments.isEmpty else { return }
+            add(chatStore.pendingAttachments)
+            chatStore.pendingAttachments = []
+        }
+        .onChange(of: chatStore.transientError) {
+            if let message = chatStore.transientError {
+                attachmentError = message
+                chatStore.transientError = nil
+            }
+        }
         .task(id: conversation?.model ?? "") {
             await chatStore.refreshCapabilities(
                 client: store.backendClient,
