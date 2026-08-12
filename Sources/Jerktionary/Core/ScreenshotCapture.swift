@@ -2,14 +2,19 @@ import AppKit
 import CoreGraphics
 import Foundation
 
-/// Interactive region screenshot via the system `screencapture` tool.
+/// Silent full-screen grab via the system `screencapture` tool.
 ///
-/// Deliberately not ScreenCaptureKit: the point is the crosshair selection the
-/// user already knows from Cmd+Shift+4, and reimplementing that overlay would be
-/// a lot of code to arrive at something less familiar. The app window itself is
-/// excluded from capture (content protection), so dragging a selection across it
-/// records what is behind it — which is what you want when asking about
-/// something on screen.
+/// Every visible side effect is deliberately off: no `-i`, so there is no
+/// crosshair and the pointer never changes; no `-C`, so the cursor stays out of
+/// the image; `-x` for no shutter sound; no `-u`, so no thumbnail appears
+/// afterwards. Nothing on screen moves, and the app does not come forward.
+///
+/// `-m` limits the grab to the main display — with several monitors the tool
+/// otherwise writes one file per screen, and the extras would be dropped.
+///
+/// The one thing outside this code's control is macOS itself: taking a screen
+/// capture can light the screen-recording indicator, and recent versions remind
+/// the user periodically which apps hold the permission.
 enum ScreenshotCapture {
     enum Failure: LocalizedError {
         case permissionDenied
@@ -25,9 +30,8 @@ enum ScreenshotCapture {
         }
     }
 
-    /// Runs the region selector. Returns nil when the user cancels with Esc,
-    /// which is a normal outcome and not an error.
-    static func captureRegion() async throws -> ChatAttachment? {
+    /// Grabs the main display without any on-screen feedback.
+    static func captureScreen() async throws -> ChatAttachment {
         guard CGPreflightScreenCaptureAccess() else {
             // Surfaces the system prompt; the answer only takes effect for the
             // next attempt, so this call is reported as denied either way.
@@ -39,12 +43,11 @@ enum ScreenshotCapture {
             .appendingPathComponent("jerktionary-shot-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        try await run(arguments: ["-i", "-x", url.path])
+        try await run(arguments: ["-x", "-m", "-t", "png", url.path])
 
-        // Cancelling leaves no file behind — the one case that isn't a failure.
-        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
-        guard let image = NSImage(data: data),
-              let attachment = ChatImageLoader.attachment(from: image, name: "Снимок экрана")
+        guard let data = try? Data(contentsOf: url), !data.isEmpty,
+              let image = NSImage(data: data),
+              let attachment = ChatImageLoader.attachment(from: image, name: "Экран")
         else { throw Failure.failed }
         return attachment
     }

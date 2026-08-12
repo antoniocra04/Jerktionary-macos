@@ -93,28 +93,29 @@ extension AppStore {
         WindowController.setOverlayMode(overlayMode)
     }
 
-    /// Ctrl+Shift+S: pick a region of the screen and put it in the chat.
+    /// Ctrl+Shift+S: grab the screen into the chat without showing anything.
     ///
-    /// Auto-sends only when a screenshot prompt is configured — an image with no
-    /// question is a wasted request — and never when the selected model can't
-    /// read images, in which case it is left in the composer with the warning
-    /// the chat tab already shows.
+    /// Nothing is brought forward and no window is touched — the whole point is
+    /// that pressing this looks like nothing happened. The answer is waiting in
+    /// the Chat tab (or the overlay) whenever it's convenient to look.
+    ///
+    /// Auto-sends only when a screenshot prompt is configured: with the app
+    /// staying in the background there is no chance to type a question, but
+    /// sending an image without one wastes the request. Never auto-sends to a
+    /// model that reports it cannot read images — that shot waits in the
+    /// composer with the warning the chat tab already shows.
     func captureScreenshotToChat() {
         Task { @MainActor in
-            let attachment: ChatAttachment?
+            let attachment: ChatAttachment
             do {
-                attachment = try await ScreenshotCapture.captureRegion()
+                attachment = try await ScreenshotCapture.captureScreen()
             } catch {
                 chats.transientError = error.localizedDescription
-                mainTab = .chat
-                NSApp.activate(ignoringOtherApps: true)
                 return
             }
-            guard let attachment else { return } // selection cancelled
 
             let conversation = chats.currentOrNewConversation()
             mainTab = .chat
-            NSApp.activate(ignoringOtherApps: true)
 
             let prompt = settings.chatScreenshotPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !prompt.isEmpty else {
