@@ -11,6 +11,7 @@ enum WindowController {
     static let normalMinSize = NSSize(width: 1024, height: 680)
 
     private static var savedFrame: NSRect?
+    private static var savedBehavior: NSWindow.CollectionBehavior?
 
     static var mainWindow: NSWindow? {
         NSApp.windows.first { $0.isVisible && !($0 is NSPanel) } ?? NSApp.windows.first
@@ -44,29 +45,39 @@ enum WindowController {
     /// over other apps' full-screen windows — the state to be in during a call.
     ///
     /// `.screenSaver` outranks full-screen windows, but a level alone is not
-    /// enough: without `.fullScreenAuxiliary` the window is hidden when another
-    /// app goes full screen, and without `.stationary` it slides away with a
-    /// space switch. The background is cleared so SwiftUI can draw a translucent
-    /// material into it, which also means the card has to be draggable by its
-    /// body — there is no title bar left to grab.
+    /// enough to follow the user around: `.canJoinAllSpaces` puts the card on
+    /// every desktop and `.fullScreenAuxiliary` keeps it up over another app's
+    /// full-screen space.
+    ///
+    /// The behaviour is assigned, not inserted into. Two pairs here are mutually
+    /// exclusive and quietly cancel out when combined: SwiftUI ships the window
+    /// with `.fullScreenPrimary`, which contradicts `.fullScreenAuxiliary`, and
+    /// `.stationary` means "not managed by Spaces", which is precisely what pins
+    /// a window to the desktop it was on.
+    ///
+    /// The background is cleared so SwiftUI can draw a translucent material into
+    /// it, which also means the card has to be draggable by its body — there is
+    /// no title bar left to grab.
     static func setOverlayMode(_ enabled: Bool) {
         guard let window = mainWindow else { return }
         if enabled {
             savedFrame = window.frame
+            savedBehavior = window.collectionBehavior
             window.minSize = overlayMinSize
             var frame = window.frame
             frame.origin.y += frame.height - overlaySize.height
             frame.size = overlaySize
             window.setFrame(frame, display: true, animate: false)
             window.level = .screenSaver
-            window.collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary, .stationary])
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.isOpaque = false
             window.backgroundColor = .clear
             window.hasShadow = false
             window.isMovableByWindowBackground = true
         } else {
             window.level = .normal
-            window.collectionBehavior.remove([.canJoinAllSpaces, .fullScreenAuxiliary, .stationary])
+            window.collectionBehavior = savedBehavior ?? []
+            savedBehavior = nil
             window.isOpaque = true
             window.backgroundColor = .windowBackgroundColor
             window.hasShadow = true
