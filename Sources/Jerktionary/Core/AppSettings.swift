@@ -52,8 +52,12 @@ final class AppSettings: ObservableObject {
     @AppStorage("settings.audioInputDeviceUID") var audioInputDeviceUID = ""
     @AppStorage("settings.theme") private var themeRaw = AppTheme.light.rawValue
     @AppStorage("settings.hasCompletedSetup") var hasCompletedSetup = false
-    /// Transparency of the compact overlay card, 0.25...1.
-    @AppStorage("settings.overlayOpacity") var overlayOpacity = 0.9
+    /// Background transparency of the compact overlay card. It shades the
+    /// material only — never the text, which the old whole-panel alpha took to
+    /// roughly 1.5:1 at the bottom of its range. The floor keeps the card
+    /// findable on a busy desktop.
+    static let overlayOpacityRange = 0.35...1.0
+    @AppStorage("settings.overlayOpacity") var overlayOpacity = 0.85
     /// Which pane the compact overlay shows.
     @AppStorage("settings.overlayPane") private var overlayPaneRaw = OverlayPane.answer.rawValue
 

@@ -93,6 +93,12 @@ final class AnswerStreamManager: ObservableObject {
         ensureStream(question: question, deep: deep, context: context)
     }
 
+    #if DEBUG
+    func seedForPreview(question: String, answer: LiveAnswer) {
+        cache[Key(question: question, deep: false)] = answer
+    }
+    #endif
+
     func resetSession() {
         for task in tasks.values {
             task.cancel()

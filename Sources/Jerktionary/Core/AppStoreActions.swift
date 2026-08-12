@@ -3,7 +3,64 @@ import SwiftUI
 
 /// Actions the global hotkeys and toolbar trigger on the store. Kept out of the
 /// @main file so they can be exercised without standing up the whole app.
+/// What the overlay's status light means. The old dot was `isListening`, which
+/// made a dead microphone and "nobody has spoken yet" the same grey.
+enum OverlayStatus: Equatable {
+    case fault
+    case hearing
+    case listening
+    case idle
+
+    var color: Color {
+        switch self {
+        case .fault: .orange
+        case .hearing: .green
+        case .listening: Color.green.opacity(0.55)
+        case .idle: Color.secondary.opacity(0.35)
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .fault: "Сбой — подробности в карточке"
+        case .hearing: "Слышу голос"
+        case .listening: "Слушаю, тихо"
+        case .idle: "Распознавание выключено"
+        }
+    }
+}
+
 extension AppStore {
+    /// One line the overlay can show when something is actually broken. Its
+    /// absence used to be indistinguishable from a quiet call.
+    var overlayFault: String? {
+        if let error = microphoneError ?? websocketError { return error }
+        if backendStatusLoaded, backendUnavailable {
+            return "Backend недоступен — ответы не придут. Проверьте, что он запущен."
+        }
+        if backendStatusLoaded, !backendReady {
+            return "Backend запущен, но не готов отвечать."
+        }
+        if isListening, connectionStatus == .error {
+            return "Нет связи с распознаванием."
+        }
+        return nil
+    }
+
+    var overlayStatus: OverlayStatus {
+        if overlayFault != nil { return .fault }
+        guard isListening else { return .idle }
+        return audioLevel.level > 0.04 ? .hearing : .listening
+    }
+
+    /// Hides the card without un-hiding the main window. The expand button
+    /// summons a 1024pt window, which is the wrong answer to "make it go away"
+    /// on a tool whose whole point is not being seen.
+    func hideOverlay() {
+        overlayMode = false
+        OverlayPanel.shared.hide()
+    }
+
     func toggleOverlay() {
         overlayMode.toggle()
         applyOverlayMode()
@@ -15,7 +72,6 @@ extension AppStore {
         if overlayMode {
             OverlayPanel.shared.show(
                 contentProtected: contentProtectionEnabled,
-                opacity: settings.overlayOpacity,
                 content: OverlayView()
                     .environmentObject(settings)
                     .environmentObject(self)
@@ -24,6 +80,7 @@ extension AppStore {
                     .environmentObject(meetings)
                     .environmentObject(answers)
                     .environmentObject(explanations)
+                    .environmentObject(audioLevel)
                     .preferredColorScheme(settings.theme.colorScheme)
             )
             WindowController.setMainWindowVisible(false)

@@ -303,6 +303,17 @@ final class AppStore: ObservableObject {
         )
     }
 
+    #if DEBUG
+    /// Fills a session so the UI can be inspected with real content. Compiled
+    /// out of release builds; the app never calls it.
+    func seedForPreview(questions: [String], answer: LiveAnswer) {
+        answeredQuestions = questions
+        for question in questions {
+            answers.seedForPreview(question: question, answer: answer)
+        }
+    }
+    #endif
+
     // MARK: - Backend status polling (30s, like useBackendStatus)
 
     func refreshBackendStatus() async {

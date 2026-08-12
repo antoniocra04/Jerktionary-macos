@@ -22,7 +22,7 @@ struct LiveAnswersView: View {
             if total == 0 {
                 emptyState
             } else {
-                AnswerCardView(question: store.answeredQuestions[index], latest: index == 0)
+                AnswerCardView(question: store.answeredQuestions[index])
                     .id(store.answeredQuestions[index])
 
                 if total > 1 {
@@ -167,7 +167,9 @@ struct AnswerCardView: View {
     /// it through AppStore would not subscribe the card to its updates.
     @EnvironmentObject private var answers: AnswerStreamManager
     let question: String
-    var latest = false
+    /// In the overlay the panel is already the card; drawing another one inside
+    /// it nests two surfaces and spends 26pt a side of a 520pt window.
+    var compact = false
     @State private var deep = false
     @State private var copied = false
 
@@ -179,7 +181,8 @@ struct AnswerCardView: View {
                 Text(question)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(compact ? 2 : 1)
+                    .help(question)
                 Spacer()
                 if state.streaming {
                     HStack(spacing: 5) {
@@ -205,7 +208,7 @@ struct AnswerCardView: View {
             } else if let answer = state.answer {
                 if !answer.answer.isEmpty {
                     Text(answer.answer)
-                        .font(.system(size: 16))
+                        .font(compact ? .title3 : .system(size: 16))
                         .lineSpacing(3)
                         .textSelection(.enabled)
                 }
@@ -219,7 +222,7 @@ struct AnswerCardView: View {
                                     .padding(.top, 7)
                                 Text(point)
                             }
-                            .font(.callout)
+                            .font(compact ? .body : .callout)
                         }
                     }
                 }
@@ -269,7 +272,13 @@ struct AnswerCardView: View {
                 }
             }
         }
-        .journalCard()
+        .padding(compact ? 0 : 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            compact ? AnyShapeStyle(.clear) : AnyShapeStyle(Theme.card),
+            in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+        )
+        .shadow(color: compact ? .clear : Theme.shadowColor, radius: 6, y: 1)
     }
 
     private func copy(_ answer: LiveAnswer) {

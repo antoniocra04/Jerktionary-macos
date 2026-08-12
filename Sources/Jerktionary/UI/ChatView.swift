@@ -236,6 +236,7 @@ struct ChatThreadView: View {
                 }
                 .labelsHidden()
                 .fixedSize()
+                .controlSize(compact ? .small : .regular)
                 .help("Мощность ризонинга")
             }
 
@@ -331,6 +332,10 @@ struct ChatThreadView: View {
             .onChange(of: conversation?.messages.count ?? 0) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
+            .onAppear {
+                // Opening on the oldest message hid the newest below the fold.
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
         }
     }
 
@@ -368,8 +373,9 @@ struct ChatThreadView: View {
                     Image(systemName: "photo.badge.plus")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Theme.tint)
+                .foregroundStyle(.secondary)
                 .help("Прикрепить изображение")
+                .accessibilityLabel("Прикрепить изображение")
 
                 ChatComposerTextView(
                     documentID: conversationID,
@@ -389,6 +395,7 @@ struct ChatThreadView: View {
                 .foregroundStyle(chatStore.isStreaming ? Color.secondary : Theme.tint)
                 .disabled(chatStore.isStreaming)
                 .help("Отправить (Enter)")
+                .accessibilityLabel("Отправить")
             }
             .padding(10)
             .background(
@@ -401,12 +408,12 @@ struct ChatThreadView: View {
                 return true
             }
 
-            if !compact || !chatStore.capabilities.ready {
+            if !compact {
                 Text(chatStore.capabilities.ready
                      ? "Enter — отправить, Shift+Enter — перенос строки"
                      : "LLM на backend недоступна — проверьте статус в настройках")
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         }
     }

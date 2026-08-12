@@ -22,7 +22,7 @@ final class OverlayPanel {
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    func show(contentProtected: Bool, opacity: Double, content: some View) {
+    func show(contentProtected: Bool, content: some View) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
 
@@ -30,7 +30,6 @@ final class OverlayPanel {
         // Stealth applies here too: without it the card is the one part of the
         // app that would show up in a screen share.
         panel.sharingType = contentProtected ? .none : .readOnly
-        panel.alphaValue = min(1, max(0.25, opacity))
         // Ordering front without activating keeps the current space in place.
         panel.orderFrontRegardless()
         panel.makeKey()
@@ -38,10 +37,6 @@ final class OverlayPanel {
 
     func hide() {
         panel?.orderOut(nil)
-    }
-
-    func setOpacity(_ opacity: Double) {
-        panel?.alphaValue = min(1, max(0.25, opacity))
     }
 
     func setContentProtection(_ enabled: Bool) {
