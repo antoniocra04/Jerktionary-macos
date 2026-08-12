@@ -6,7 +6,7 @@ import Foundation
 /// overlay mode, and the masked window title.
 @MainActor
 enum WindowController {
-    static let overlaySize = NSSize(width: 460, height: 320)
+    static let overlaySize = NSSize(width: 520, height: 360)
     static let overlayMinSize = NSSize(width: 360, height: 220)
     static let normalMinSize = NSSize(width: 1024, height: 680)
 
@@ -40,8 +40,15 @@ enum WindowController {
         mainWindow?.title = value
     }
 
-    /// Compact always-on-top card for use during a call. `.screenSaver` level
-    /// keeps it above full-screen call windows too.
+    /// Compact translucent card that floats over everything, on every space and
+    /// over other apps' full-screen windows — the state to be in during a call.
+    ///
+    /// `.screenSaver` outranks full-screen windows, but a level alone is not
+    /// enough: without `.fullScreenAuxiliary` the window is hidden when another
+    /// app goes full screen, and without `.stationary` it slides away with a
+    /// space switch. The background is cleared so SwiftUI can draw a translucent
+    /// material into it, which also means the card has to be draggable by its
+    /// body — there is no title bar left to grab.
     static func setOverlayMode(_ enabled: Bool) {
         guard let window = mainWindow else { return }
         if enabled {
@@ -52,15 +59,31 @@ enum WindowController {
             frame.size = overlaySize
             window.setFrame(frame, display: true, animate: false)
             window.level = .screenSaver
-            window.collectionBehavior.insert(.canJoinAllSpaces)
+            window.collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary, .stationary])
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = false
+            window.isMovableByWindowBackground = true
         } else {
             window.level = .normal
-            window.collectionBehavior.remove(.canJoinAllSpaces)
+            window.collectionBehavior.remove([.canJoinAllSpaces, .fullScreenAuxiliary, .stationary])
+            window.isOpaque = true
+            window.backgroundColor = .windowBackgroundColor
+            window.hasShadow = true
+            window.isMovableByWindowBackground = false
+            window.alphaValue = 1
             window.minSize = normalMinSize
             if let savedFrame {
                 window.setFrame(savedFrame, display: true, animate: false)
             }
             savedFrame = nil
         }
+    }
+
+    /// Overall transparency of the compact card, including its text — the point
+    /// is to see through it, so a translucent background alone isn't enough.
+    /// Clamped: fully invisible would be a window that can't be found again.
+    static func setOverlayOpacity(_ opacity: Double) {
+        mainWindow?.alphaValue = min(1, max(0.25, opacity))
     }
 }

@@ -15,7 +15,10 @@ struct RootView: View {
             }
         }
         .tint(Theme.tint)
-        .background(Theme.canvas)
+        // No canvas behind the overlay: it draws its own translucent material,
+        // and an opaque colour here would sit in front of the cleared window
+        // background and make the card solid again.
+        .background(store.overlayMode ? Color.clear : Theme.canvas)
     }
 }
 
@@ -155,6 +158,13 @@ struct MainTopBar: View {
             if store.isListening {
                 LevelMeterView(model: store.audioLevel)
                     .padding(.trailing, 6)
+            }
+
+            CircleToolbarButton(
+                systemImage: "rectangle.bottomthird.inset.filled",
+                help: "Компактный режим поверх всех окон (Ctrl+Shift+O)"
+            ) {
+                store.toggleOverlay()
             }
 
             CircleToolbarButton(

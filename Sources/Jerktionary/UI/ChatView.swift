@@ -144,16 +144,21 @@ private struct ConversationRow: View {
 /// for the same reason the note body is: pushing a growing string through
 /// `@State` on every keystroke costs time proportional to its length.
 @MainActor
-private final class ComposerDraft {
+final class ComposerDraft {
     var text = ""
     var attachments: [ChatAttachment] = []
 }
 
-private struct ChatThreadView: View {
+/// Also used by the compact overlay, which shows the thread on its own.
+struct ChatThreadView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: AppStore
     let conversationID: String
+    /// Set by the overlay, where the card is ~360pt tall: the full-size chrome
+    /// (its own card inset, a tall composer, the keyboard hint) would leave the
+    /// thread itself almost no room.
+    var compact = false
 
     @State private var draft = ComposerDraft()
     /// Bumped when the attachment strip must redraw; the text itself never does.
@@ -172,7 +177,13 @@ private struct ChatThreadView: View {
             thread
             composer
         }
-        .journalCard(padding: 18)
+        .padding(compact ? 0 : 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            compact ? AnyShapeStyle(.clear) : AnyShapeStyle(Theme.card),
+            in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+        )
+        .shadow(color: compact ? .clear : Theme.shadowColor, radius: 6, y: 1)
         .onChange(of: chatStore.pendingAttachments) {
             // Handed over by the screenshot hotkey, which has no access to the
             // draft; taking them here keeps one owner for the composer state.
@@ -212,7 +223,8 @@ private struct ChatThreadView: View {
                 }
             }
             .labelsHidden()
-            .frame(maxWidth: 260)
+            .frame(maxWidth: compact ? 190 : 260)
+            .controlSize(compact ? .small : .regular)
             .help("Модель. Список задаётся в настройках.")
 
             if !chatStore.capabilities.reasoningLevels.isEmpty {
@@ -365,7 +377,7 @@ private struct ChatThreadView: View {
                     onSubmit: submit,
                     onPasteImages: add
                 )
-                .frame(minHeight: 34, maxHeight: 120)
+                .frame(minHeight: compact ? 26 : 34, maxHeight: compact ? 72 : 120)
 
                 Button {
                     submit()
@@ -389,11 +401,13 @@ private struct ChatThreadView: View {
                 return true
             }
 
-            Text(chatStore.capabilities.ready
-                 ? "Enter — отправить, Shift+Enter — перенос строки"
-                 : "LLM на backend недоступна — проверьте статус в настройках")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            if !compact || !chatStore.capabilities.ready {
+                Text(chatStore.capabilities.ready
+                     ? "Enter — отправить, Shift+Enter — перенос строки"
+                     : "LLM на backend недоступна — проверьте статус в настройках")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 

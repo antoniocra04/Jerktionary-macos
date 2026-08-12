@@ -14,6 +14,23 @@ enum AudioSource: String, CaseIterable, Identifiable {
     }
 }
 
+/// What the compact overlay shows. Kept small on purpose: the card is meant to
+/// be glanced at, not worked in.
+enum OverlayPane: String, CaseIterable, Identifiable {
+    case answer
+    case chat
+    case transcript
+    var id: String { rawValue }
+
+    var russianLabel: String {
+        switch self {
+        case .answer: "Ответ"
+        case .chat: "Чат"
+        case .transcript: "Транскрипт"
+        }
+    }
+}
+
 enum AppTheme: String, CaseIterable, Identifiable {
     case light, dark
     var id: String { rawValue }
@@ -35,6 +52,15 @@ final class AppSettings: ObservableObject {
     @AppStorage("settings.audioInputDeviceUID") var audioInputDeviceUID = ""
     @AppStorage("settings.theme") private var themeRaw = AppTheme.light.rawValue
     @AppStorage("settings.hasCompletedSetup") var hasCompletedSetup = false
+    /// Transparency of the compact overlay card, 0.25...1.
+    @AppStorage("settings.overlayOpacity") var overlayOpacity = 0.9
+    /// Which pane the compact overlay shows.
+    @AppStorage("settings.overlayPane") private var overlayPaneRaw = OverlayPane.answer.rawValue
+
+    var overlayPane: OverlayPane {
+        get { OverlayPane(rawValue: overlayPaneRaw) ?? .answer }
+        set { overlayPaneRaw = newValue.rawValue }
+    }
 
     /// Models offered in the chat tab, one per line. Kept as a hand-written list
     /// on purpose: providers disagree on whether /v1/models exists and what it
