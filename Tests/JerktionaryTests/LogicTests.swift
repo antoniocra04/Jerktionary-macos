@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import Jerktionary
 
@@ -161,4 +162,88 @@ final class WsEventParsingTests: XCTestCase {
     func testUnknownEventIsNil() {
         XCTAssertNil(BackendWsEvent.parse(Data("{\"type\":\"nope\"}".utf8)))
     }
+}
+
+final class ChatTests: XCTestCase {
+    private func message(_ role: ChatMessage.Role, _ text: String,
+                         _ attachments: [ChatAttachment] = []) -> ChatMessage {
+        ChatMessage.new(role: role, text: text, attachments: attachments)
+    }
+
+    private var pngAttachment: ChatAttachment {
+        ChatAttachment(id: "a1", dataURL: "data:image/png;base64,aGVsbG8=", name: "x.png")
+    }
+
+    func testDisplayTitleUsesTheFirstUserLine() {
+        var conversation = Conversation.new()
+        conversation.messages = [message(.user, "Первая строка\nвторая")]
+        XCTAssertEqual(conversation.displayTitle, "Первая строка")
+    }
+
+    func testDisplayTitleIsBoundedForAPastedWall() {
+        // Same guard as notes: an unbounded first "line" becomes a giant
+        // single-line Text in the list and costs milliseconds per row.
+        var conversation = Conversation.new()
+        conversation.messages = [message(.user, String(repeating: "длинно ", count: 5_000))]
+        XCTAssertLessThanOrEqual(conversation.displayTitle.count, Note.titleLengthLimit)
+    }
+
+    func testDisplayTitleFallsBackForAnImageOnlyTurn() {
+        var conversation = Conversation.new()
+        conversation.messages = [message(.user, "", [pngAttachment])]
+        XCTAssertEqual(conversation.displayTitle, "Изображение")
+    }
+
+    func testDisplayTitleIgnoresAssistantTurns() {
+        var conversation = Conversation.new()
+        conversation.messages = [message(.assistant, "Ответ"), message(.user, "Вопрос")]
+        XCTAssertEqual(conversation.displayTitle, "Вопрос")
+    }
+
+    func testEmptyConversationHasAPlaceholderTitle() {
+        XCTAssertEqual(Conversation.new().displayTitle, "Новый чат")
+    }
+
+    func testAttachmentDecodesItsDataURI() {
+        XCTAssertNotNil(ChatAttachment(
+            id: "a",
+            dataURL: "data:image/png;base64,\(Self.onePixelPNG)",
+            name: "p.png"
+        ).image)
+    }
+
+    func testAttachmentWithBrokenPayloadDecodesToNil() {
+        XCTAssertNil(ChatAttachment(id: "a", dataURL: "data:image/png;base64,!!!", name: "p").image)
+    }
+
+    func testWireMessageWrapsImagesAsDataUrlObjects() throws {
+        // The backend schema takes [{data_url: …}]; bare strings fail validation.
+        let wire = BackendClient.ChatWireMessage(
+            role: "user", content: "что тут?", images: ["data:image/png;base64,aGVsbG8="]
+        )
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(wire))
+        let dict = try XCTUnwrap(json as? [String: Any])
+        XCTAssertEqual(dict["role"] as? String, "user")
+        let images = try XCTUnwrap(dict["images"] as? [[String: String]])
+        XCTAssertEqual(images, [["data_url": "data:image/png;base64,aGVsbG8="]])
+    }
+
+    func testWireMessageWithoutImagesSendsAnEmptyArray() throws {
+        let wire = BackendClient.ChatWireMessage(role: "assistant", content: "ответ", images: [])
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(wire))
+        let dict = try XCTUnwrap(json as? [String: Any])
+        XCTAssertEqual((dict["images"] as? [Any])?.count, 0)
+    }
+
+    func testImageLoaderCapsMatchTheBackendLimits() {
+        // The backend rejects a request with more than 8 images or a data URI
+        // over 8 MB of base64; refusing locally saves a pointless round trip.
+        XCTAssertEqual(ChatImageLoader.maxPerMessage, 8)
+        XCTAssertLessThan(ChatImageLoader.maxBase64Bytes, 8_000_000)
+    }
+
+    /// 1×1 transparent PNG.
+    private static let onePixelPNG =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk" +
+        "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 }

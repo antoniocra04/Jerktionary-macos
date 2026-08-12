@@ -1,0 +1,372 @@
+import AppKit
+import Foundation
+
+/// An image attached to a chat message, kept as a base64 data: URI — the shape
+/// the backend takes and the shape that survives JSON persistence unchanged.
+struct ChatAttachment: Codable, Identifiable, Hashable {
+    var id: String
+    var dataURL: String
+    /// Original file name when the image came from disk, for the UI only.
+    var name: String
+
+    var image: NSImage? {
+        guard let comma = dataURL.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...]))
+        else { return nil }
+        return NSImage(data: data)
+    }
+}
+
+struct ChatMessage: Codable, Identifiable, Hashable {
+    enum Role: String, Codable {
+        case user
+        case assistant
+    }
+
+    var id: String
+    var role: Role
+    var text: String
+    var attachments: [ChatAttachment]
+    var createdAt: Double
+    /// Set when the backend reported a failure instead of an answer.
+    var error: String?
+
+    static func new(role: Role, text: String, attachments: [ChatAttachment] = []) -> ChatMessage {
+        ChatMessage(
+            id: Self.freshID(),
+            role: role,
+            text: text,
+            attachments: attachments,
+            createdAt: Date.now.timeIntervalSince1970 * 1000,
+            error: nil
+        )
+    }
+
+    static func freshID() -> String {
+        "\(Int(Date.now.timeIntervalSince1970 * 1000))-\(String(UUID().uuidString.prefix(6)).lowercased())"
+    }
+}
+
+struct Conversation: Codable, Identifiable, Hashable {
+    var id: String
+    var title: String
+    var messages: [ChatMessage]
+    var createdAt: Double
+    var updatedAt: Double
+    /// Remembered per conversation so switching back restores how it was asked.
+    var model: String
+    var reasoningEffort: String
+
+    static func new() -> Conversation {
+        let now = Date.now.timeIntervalSince1970 * 1000
+        return Conversation(
+            id: ChatMessage.freshID(),
+            title: "",
+            messages: [],
+            createdAt: now,
+            updatedAt: now,
+            model: "",
+            reasoningEffort: ""
+        )
+    }
+
+    /// The first user line, bounded the same way notes are — a pasted wall of
+    /// text must not become a giant single-line label in the list.
+    var displayTitle: String {
+        if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return String(title.prefix(Note.titleLengthLimit))
+        }
+        guard let first = messages.first(where: { $0.role == .user }) else { return "Новый чат" }
+        let head = first.text
+            .prefix(Note.titleScanLimit)
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first
+            .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        if head.isEmpty {
+            return first.attachments.isEmpty ? "Новый чат" : "Изображение"
+        }
+        return String(head.prefix(Note.titleLengthLimit))
+    }
+}
+
+/// What the active backend provider can do. Fetched once per app launch; the
+/// reasoning picker only exists when the provider advertises levels.
+struct ChatCapabilities: Equatable {
+    var provider: String = ""
+    var label: String = ""
+    var defaultModel: String = ""
+    var reasoningLevels: [String] = []
+    var ready: Bool = false
+}
+
+/// Conversations archive plus the live streaming state, stored next to
+/// notes.json in Application Support.
+///
+/// Streaming text deliberately does not go through `@Published` on every token:
+/// as with the notes editor and the transcript, pushing a growing string through
+/// SwiftUI's state graph costs time proportional to its length. Tokens land in
+/// `streamingText`, a plain property, and a timer publishes at a fixed rate.
+@MainActor
+final class ChatStore: ObservableObject {
+    @Published private(set) var conversations: [Conversation] = []
+    @Published private(set) var capabilities = ChatCapabilities()
+    @Published private(set) var isStreaming = false
+    /// Bumped at a fixed rate while streaming so the view redraws without every
+    /// token invalidating the whole tree.
+    @Published private(set) var streamTick = 0
+
+    /// The answer as it arrives. Read during a redraw; never published directly.
+    private(set) var streamingText = ""
+    private(set) var streamingConversationID: String?
+
+    private static let persistDebounceNanos: UInt64 = 400_000_000
+    /// ~20 fps: fast enough to read as live typing, slow enough that a long
+    /// answer doesn't re-render the transcript hundreds of times.
+    private static let streamPublishInterval: UInt64 = 50_000_000
+
+    private let ioQueue = DispatchQueue(label: "com.jerktionary.chat.io", qos: .utility)
+    private var persistTask: Task<Void, Never>?
+    private var streamTask: Task<Void, Never>?
+    private var publishTask: Task<Void, Never>?
+
+    private var storeURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Jerktionary", isDirectory: true)
+            .appendingPathComponent("chats.json")
+    }
+
+    init() {
+        load()
+    }
+
+    func load() {
+        guard let data = try? Data(contentsOf: storeURL),
+              let parsed = try? JSONDecoder().decode([Conversation].self, from: data)
+        else {
+            conversations = []
+            return
+        }
+        conversations = parsed.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    func conversation(id: String) -> Conversation? {
+        conversations.first { $0.id == id }
+    }
+
+    @discardableResult
+    func create() -> Conversation {
+        let conversation = Conversation.new()
+        conversations.insert(conversation, at: 0)
+        persistNow()
+        return conversation
+    }
+
+    func delete(_ id: String) {
+        if streamingConversationID == id {
+            cancelStreaming()
+        }
+        conversations.removeAll { $0.id == id }
+        persistNow()
+    }
+
+    func updateSettings(id: String, model: String? = nil, reasoningEffort: String? = nil) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        if let model { conversations[index].model = model }
+        if let reasoningEffort { conversations[index].reasoningEffort = reasoningEffort }
+        schedulePersist()
+    }
+
+    // MARK: - Capabilities
+
+    func refreshCapabilities(client: BackendClient) async {
+        do {
+            capabilities = try await client.chatCapabilities()
+        } catch {
+            capabilities = ChatCapabilities()
+        }
+    }
+
+    // MARK: - Sending
+
+    /// Appends the user turn and streams the reply into the same conversation.
+    func send(
+        conversationID: String,
+        text: String,
+        attachments: [ChatAttachment],
+        client: BackendClient,
+        systemPrompt: String
+    ) {
+        guard !isStreaming,
+              let index = conversations.firstIndex(where: { $0.id == conversationID })
+        else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty || !attachments.isEmpty else { return }
+
+        conversations[index].messages.append(
+            .new(role: .user, text: trimmed, attachments: attachments)
+        )
+        touch(conversationID)
+
+        let conversation = conversations[index]
+        let wire = conversation.messages.map { message in
+            BackendClient.ChatWireMessage(
+                role: message.role.rawValue,
+                content: message.text,
+                images: message.attachments.map(\.dataURL)
+            )
+        }
+
+        streamingText = ""
+        streamingConversationID = conversationID
+        isStreaming = true
+        startPublishing()
+
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            var failure: String?
+            do {
+                for try await delta in client.chatStream(
+                    messages: wire,
+                    system: systemPrompt,
+                    model: conversation.model,
+                    reasoningEffort: conversation.reasoningEffort
+                ) {
+                    if Task.isCancelled { break }
+                    self.streamingText += delta
+                }
+            } catch {
+                failure = Self.message(for: error)
+            }
+            self.finishStreaming(conversationID: conversationID, failure: failure)
+        }
+    }
+
+    func cancelStreaming() {
+        guard isStreaming else { return }
+        streamTask?.cancel()
+        streamTask = nil
+        // Whatever arrived before the cancel is worth keeping.
+        finishStreaming(conversationID: streamingConversationID, failure: nil)
+    }
+
+    /// Drops the last assistant turn and re-asks with the same history.
+    func regenerate(conversationID: String, client: BackendClient, systemPrompt: String) {
+        guard !isStreaming,
+              let index = conversations.firstIndex(where: { $0.id == conversationID }),
+              let last = conversations[index].messages.last
+        else { return }
+        if last.role == .assistant {
+            conversations[index].messages.removeLast()
+        }
+        guard let question = conversations[index].messages.last, question.role == .user else {
+            return
+        }
+        conversations[index].messages.removeLast()
+        send(
+            conversationID: conversationID,
+            text: question.text,
+            attachments: question.attachments,
+            client: client,
+            systemPrompt: systemPrompt
+        )
+    }
+
+    private func finishStreaming(conversationID: String?, failure: String?) {
+        publishTask?.cancel()
+        publishTask = nil
+        streamTask = nil
+        isStreaming = false
+
+        let text = streamingText
+        streamingText = ""
+        streamingConversationID = nil
+
+        guard let conversationID,
+              let index = conversations.firstIndex(where: { $0.id == conversationID })
+        else {
+            streamTick &+= 1
+            return
+        }
+        if !text.isEmpty || failure != nil {
+            var message = ChatMessage.new(role: .assistant, text: text)
+            message.error = failure
+            conversations[index].messages.append(message)
+        }
+        touch(conversationID)
+        streamTick &+= 1
+    }
+
+    private func startPublishing() {
+        publishTask?.cancel()
+        publishTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.streamPublishInterval)
+                guard let self, !Task.isCancelled else { return }
+                self.streamTick &+= 1
+            }
+        }
+    }
+
+    private func touch(_ id: String) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[index].updatedAt = Date.now.timeIntervalSince1970 * 1000
+        conversations.sort { $0.updatedAt > $1.updatedAt }
+        schedulePersist()
+    }
+
+    private static func message(for error: Error) -> String {
+        if let backend = error as? BackendError {
+            switch backend.code {
+            case "LLM_UNAVAILABLE":
+                return "LLM недоступна. Проверьте, что backend запущен с рабочим провайдером."
+            case "LLM_BAD_RESPONSE":
+                return "Провайдер вернул ошибку. Возможно, модель не принимает изображения или выбранный уровень ризонинга."
+            default:
+                return backend.message
+            }
+        }
+        return error.localizedDescription
+    }
+
+    // MARK: - Persistence
+
+    /// Same shape as NotesStore: debounced, written off the main thread, and
+    /// flushed synchronously before the app can quit.
+    func flushPendingWrites() {
+        if persistTask != nil {
+            persistNow()
+        }
+        ioQueue.sync {}
+    }
+
+    private func schedulePersist() {
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.persistDebounceNanos)
+            guard !Task.isCancelled, let self else { return }
+            self.persistNow()
+        }
+    }
+
+    private func persistNow() {
+        persistTask?.cancel()
+        persistTask = nil
+        let snapshot = conversations
+        let url = storeURL
+        ioQueue.async {
+            do {
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try JSONEncoder().encode(snapshot).write(to: url, options: .atomic)
+            } catch {
+                NSLog("Jerktionary: failed to persist chats: \(error)")
+            }
+        }
+    }
+
+    static func formatDate(_ millis: Double) -> String {
+        NotesStore.formatDate(millis)
+    }
+}

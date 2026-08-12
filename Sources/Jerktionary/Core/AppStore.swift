@@ -55,6 +55,7 @@ final class AppStore: ObservableObject {
     let settings: AppSettings
     let meetings: MeetingsStore
     let notes: NotesStore
+    let chats: ChatStore
     /// Not `@Published`: see AudioLevelModel — the meter observes it directly so
     /// the ~12 Hz level updates don't invalidate the rest of the UI.
     let audioLevel = AudioLevelModel()
@@ -75,6 +76,7 @@ final class AppStore: ObservableObject {
         self.settings = settings
         self.meetings = MeetingsStore()
         self.notes = NotesStore()
+        self.chats = ChatStore()
         startBackendStatusPolling()
     }
 

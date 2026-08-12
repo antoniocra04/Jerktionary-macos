@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var chats: ChatStore
     @State private var devices: [AudioInputDevice] = []
 
     var body: some View {
@@ -38,6 +39,37 @@ struct SettingsView: View {
                     .onSubmit { WindowController.setTitle(settings.displayName) }
                 TextField("О себе", text: $settings.aboutMe, axis: .vertical)
                     .lineLimit(3...6)
+            }
+
+            Section("Чат") {
+                if chats.capabilities.label.isEmpty {
+                    Text("Провайдер определяется при запуске backend.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    LabeledContent("Провайдер", value: chats.capabilities.label)
+                    LabeledContent(
+                        "Модель backend",
+                        value: chats.capabilities.defaultModel.isEmpty
+                            ? "—" : chats.capabilities.defaultModel
+                    )
+                    LabeledContent(
+                        "Ризонинг",
+                        value: chats.capabilities.reasoningLevels.isEmpty
+                            ? "не поддерживается"
+                            : chats.capabilities.reasoningLevels.joined(separator: ", ")
+                    )
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField("Модели, по одной в строке", text: $settings.chatModelsRaw, axis: .vertical)
+                        .lineLimit(3...8)
+                        .font(.system(.body, design: .monospaced))
+                    Text("Список для выбора в чате. Пусто — используется модель backend.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                TextField("Системный промпт", text: $settings.chatSystemPrompt, axis: .vertical)
+                    .lineLimit(2...6)
             }
 
             Section {

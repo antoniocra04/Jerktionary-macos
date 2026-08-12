@@ -4,6 +4,7 @@ import Foundation
 enum MainTab: String, CaseIterable, Identifiable {
     case session
     case notes
+    case chat
     var id: String { rawValue }
 }
 

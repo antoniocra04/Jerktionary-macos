@@ -126,6 +126,80 @@ struct BackendClient {
         }
     }
 
+    // MARK: Chat
+
+    struct ChatWireMessage: Encodable {
+        let role: String
+        let content: String
+        /// base64 data: URIs; the backend validates and re-encodes them per provider.
+        let images: [String]
+
+        private enum CodingKeys: String, CodingKey {
+            case role, content, images
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(role, forKey: .role)
+            try container.encode(content, forKey: .content)
+            try container.encode(images.map { ["data_url": $0] }, forKey: .images)
+        }
+    }
+
+    func chatCapabilities() async throws -> ChatCapabilities {
+        struct ResponseDto: Decodable {
+            let provider: String
+            let label: String
+            let default_model: String
+            let reasoning_levels: [String]
+            let ready: Bool
+        }
+        let dto: ResponseDto = try await getJSON("/api/chat/capabilities")
+        return ChatCapabilities(
+            provider: dto.provider,
+            label: dto.label,
+            defaultModel: dto.default_model,
+            reasoningLevels: dto.reasoning_levels,
+            ready: dto.ready
+        )
+    }
+
+    private struct ChatSnapshot: Decodable {
+        var delta: String?
+        var done: Bool?
+        var error: String?
+    }
+
+    /// Streams `/api/chat/stream`, yielding text deltas as they arrive.
+    func chatStream(
+        messages: [ChatWireMessage],
+        system: String,
+        model: String,
+        reasoningEffort: String
+    ) -> AsyncThrowingStream<String, Error> {
+        struct RequestDto: Encodable {
+            let messages: [ChatWireMessage]
+            let system: String
+            let model: String
+            let reasoning_effort: String
+        }
+        let body = RequestDto(
+            messages: messages,
+            system: system,
+            model: model,
+            reasoning_effort: reasoningEffort
+        )
+        // Unlike the answer/explain streams there is no snapshot to rebuild: each
+        // event carries only what is new. The terminating `{"done": true}` event
+        // maps to an empty string, which the caller appends harmlessly.
+        return sseStream(path: "/api/chat/stream", body: body) { (snapshot: ChatSnapshot) in
+            if let error = snapshot.error {
+                throw BackendError(message: "Чат вернул ошибку", status: 502, code: error)
+            }
+            return snapshot.delta ?? ""
+        }
+    }
+
     // MARK: - Helpers
 
     /// Window of `size` chars centered on the last mention of `term`; falls back

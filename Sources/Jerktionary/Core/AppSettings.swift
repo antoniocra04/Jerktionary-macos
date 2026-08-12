@@ -36,6 +36,21 @@ final class AppSettings: ObservableObject {
     @AppStorage("settings.theme") private var themeRaw = AppTheme.light.rawValue
     @AppStorage("settings.hasCompletedSetup") var hasCompletedSetup = false
 
+    /// Models offered in the chat tab, one per line. Kept as a hand-written list
+    /// on purpose: providers disagree on whether /v1/models exists and what it
+    /// returns, so a fetched list would be empty for some and unusable for others.
+    /// Empty means "whatever the backend was started with".
+    @AppStorage("settings.chatModels") var chatModelsRaw = ""
+    /// Optional system prompt prepended to every chat conversation.
+    @AppStorage("settings.chatSystemPrompt") var chatSystemPrompt = ""
+
+    var chatModels: [String] {
+        chatModelsRaw
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     var audioSource: AudioSource {
         get { AudioSource(rawValue: audioSourceRaw) ?? .microphone }
         set { audioSourceRaw = newValue.rawValue }

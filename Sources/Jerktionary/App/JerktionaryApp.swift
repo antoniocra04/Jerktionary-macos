@@ -21,6 +21,7 @@ struct JerktionaryApp: App {
                 // read them need to observe them, not rely on AppStore churn to
                 // be re-rendered.
                 .environmentObject(store.notes)
+                .environmentObject(store.chats)
                 .environmentObject(store.meetings)
                 .environmentObject(store.answers)
                 .environmentObject(store.explanations)
@@ -76,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // off the main thread, and nothing else waits for that write.
         MainActor.assumeIsolated {
             store?.notes.flushPendingWrites()
+            store?.chats.flushPendingWrites()
         }
     }
 

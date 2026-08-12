@@ -72,6 +72,10 @@ struct MainView: View {
                 NotesView()
                     .opacity(store.mainTab == .notes ? 1 : 0)
                     .allowsHitTesting(store.mainTab == .notes)
+
+                ChatView()
+                    .opacity(store.mainTab == .chat ? 1 : 0)
+                    .allowsHitTesting(store.mainTab == .chat)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -139,6 +143,7 @@ struct MainTopBar: View {
             Picker("", selection: $store.mainTab) {
                 Text("Сессия").tag(MainTab.session)
                 Text("Заметки").tag(MainTab.notes)
+                Text("Чат").tag(MainTab.chat)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
