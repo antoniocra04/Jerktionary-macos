@@ -8,17 +8,14 @@ struct RootView: View {
         Group {
             if !settings.hasCompletedSetup {
                 SetupWizardView()
-            } else if store.overlayMode {
-                OverlayView()
             } else {
+                // The compact card is a separate floating panel, not a state of
+                // this window — see OverlayPanel.
                 MainView()
             }
         }
         .tint(Theme.tint)
-        // No canvas behind the overlay: it draws its own translucent material,
-        // and an opaque colour here would sit in front of the cleared window
-        // background and make the card solid again.
-        .background(store.overlayMode ? Color.clear : Theme.canvas)
+        .background(Theme.canvas)
     }
 }
 

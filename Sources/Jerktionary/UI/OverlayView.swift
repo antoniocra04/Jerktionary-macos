@@ -3,9 +3,9 @@ import SwiftUI
 
 /// Compact translucent card that floats over everything during a call.
 ///
-/// The window behind it has no title bar and a cleared background (see
-/// WindowController.setOverlayMode), so this view draws the whole card: the
-/// material, the rounded edge, and the drag handle that replaces the title bar.
+/// Hosted in a floating panel with no title bar and a cleared background (see
+/// OverlayPanel), so this view draws the whole card: the material, the rounded
+/// edge, and the drag handle that replaces the title bar.
 struct OverlayView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var settings: AppSettings
@@ -25,9 +25,8 @@ struct OverlayView: View {
                 .strokeBorder(.white.opacity(0.12), lineWidth: 1)
         )
         .ignoresSafeArea()
-        .onAppear { WindowController.setOverlayOpacity(settings.overlayOpacity) }
         .onChange(of: settings.overlayOpacity) {
-            WindowController.setOverlayOpacity(settings.overlayOpacity)
+            OverlayPanel.shared.setOpacity(settings.overlayOpacity)
         }
     }
 
