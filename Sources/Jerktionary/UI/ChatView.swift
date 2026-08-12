@@ -162,6 +162,9 @@ private struct ChatThreadView: View {
     /// Bumped when the attachment strip must redraw; the text itself never does.
     @State private var attachmentTick = 0
     @State private var attachmentError: String?
+    /// Set while the pre-send capability check is in flight, so a second Enter
+    /// can't start the same message twice before streaming has begun.
+    @State private var submitting = false
 
     private var conversation: Conversation? { chatStore.conversation(id: conversationID) }
 
@@ -373,11 +376,31 @@ private struct ChatThreadView: View {
     }
 
     private func submit() {
-        if chatStore.capabilities.refusesImages, !draft.attachments.isEmpty {
-            attachmentError =
-                "Модель \(chatStore.capabilities.model) работает только с текстом. Уберите изображения или смените модель."
+        guard !chatStore.isStreaming, !submitting else { return }
+        guard !draft.attachments.isEmpty else {
+            performSend()
             return
         }
+        // The guard is only as good as the capabilities behind it, and the first
+        // fetch races a backend that may still be starting. Confirm before
+        // sending; when they are already known this returns without a request.
+        submitting = true
+        Task {
+            defer { submitting = false }
+            await chatStore.ensureCapabilities(
+                client: store.backendClient,
+                model: conversation?.model ?? ""
+            )
+            if chatStore.capabilities.refusesImages {
+                attachmentError =
+                    "Модель \(chatStore.capabilities.model) работает только с текстом. Уберите изображения или смените модель."
+                return
+            }
+            performSend()
+        }
+    }
+
+    private func performSend() {
         chatStore.send(
             conversationID: conversationID,
             text: draft.text,
@@ -387,6 +410,7 @@ private struct ChatThreadView: View {
         )
         draft.text = ""
         draft.attachments = []
+        attachmentError = nil
         attachmentTick &+= 1
         NotificationCenter.default.post(name: .chatComposerShouldClear, object: conversationID)
     }

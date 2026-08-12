@@ -189,11 +189,31 @@ final class ChatStore: ObservableObject {
     /// and whether images are accepted both do on makora — so this is refetched
     /// whenever the selected model changes, not just at launch.
     func refreshCapabilities(client: BackendClient, model: String = "") async {
-        do {
-            capabilities = try await client.chatCapabilities(model: model)
-        } catch {
-            capabilities = ChatCapabilities()
+        // Retried because this typically fails while the backend is restarting,
+        // and the answer gates the image guard: silently keeping "unknown" would
+        // let an attachment through to a text-only model.
+        for attempt in 0..<3 {
+            do {
+                capabilities = try await client.chatCapabilities(model: model)
+                return
+            } catch {
+                if attempt < 2 {
+                    try? await Task.sleep(nanoseconds: 700_000_000)
+                }
+            }
         }
+        // Keep the last known answer rather than blanking it — stale limits are
+        // closer to the truth than "no limits at all".
+        capabilities.ready = false
+    }
+
+    /// Fetches capabilities when the cached ones don't describe `model`.
+    func ensureCapabilities(client: BackendClient, model: String) async {
+        let wanted = model.isEmpty ? capabilities.defaultModel : model
+        if !capabilities.model.isEmpty, capabilities.model == wanted {
+            return
+        }
+        await refreshCapabilities(client: client, model: model)
     }
 
     // MARK: - Sending
