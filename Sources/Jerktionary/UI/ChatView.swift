@@ -197,7 +197,7 @@ private struct ChatThreadView: View {
         HStack(spacing: 10) {
             Picker("", selection: modelBinding) {
                 Text(defaultModelLabel).tag("")
-                ForEach(settings.chatModels, id: \.self) { model in
+                ForEach(offeredModels, id: \.self) { model in
                     Text(model).tag(model)
                 }
             }
@@ -240,6 +240,14 @@ private struct ChatThreadView: View {
         .foregroundStyle(.secondary)
     }
 
+    /// What the provider is known to serve, plus anything hand-added in
+    /// settings. Deduplicated, provider order first.
+    private var offeredModels: [String] {
+        var seen = Set<String>()
+        return (chatStore.capabilities.models + settings.chatModels)
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     private var defaultModelLabel: String {
         let model = chatStore.capabilities.defaultModel
         return model.isEmpty ? "Модель backend" : "По умолчанию (\(model))"
@@ -266,6 +274,10 @@ private struct ChatThreadView: View {
         case "low": "Ризонинг: низкий"
         case "medium": "Ризонинг: средний"
         case "high": "Ризонинг: высокий"
+        // makora's own vocabulary: "max" above high, and gemma exposes a plain
+        // on/off pair instead of a scale.
+        case "max": "Ризонинг: максимум"
+        case "enabled": "Ризонинг: вкл"
         default: "Ризонинг: \(level)"
         }
     }

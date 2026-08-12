@@ -152,6 +152,7 @@ struct BackendClient {
             let label: String
             let default_model: String
             let model: String
+            let models: [String]
             let reasoning_levels: [String]
             let accepts_images: Bool?
             let ready: Bool
@@ -165,6 +166,7 @@ struct BackendClient {
             label: dto.label,
             defaultModel: dto.default_model,
             model: dto.model,
+            models: dto.models,
             reasoningLevels: dto.reasoning_levels,
             acceptsImages: dto.accepts_images,
             ready: dto.ready

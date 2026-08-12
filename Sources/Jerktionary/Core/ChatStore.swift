@@ -97,6 +97,8 @@ struct ChatCapabilities: Equatable {
     var defaultModel: String = ""
     /// The model these capabilities describe.
     var model: String = ""
+    /// Ids the provider is known to serve, offered in the picker.
+    var models: [String] = []
     var reasoningLevels: [String] = []
     /// nil when the provider publishes no modality metadata — not a "no".
     var acceptsImages: Bool?
