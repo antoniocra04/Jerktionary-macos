@@ -62,18 +62,10 @@ struct OverlayView: View {
         if reduceTransparency {
             Theme.canvas
         } else {
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                Rectangle().fill(Theme.card.opacity(overlayScrimOpacity))
-            }
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(settings.overlayOpacity)
         }
-    }
-
-    private var overlayScrimOpacity: Double {
-        let range = AppSettings.overlayOpacityRange
-        let progress = (settings.overlayOpacity - range.lowerBound) /
-            (range.upperBound - range.lowerBound)
-        return 0.18 + min(1, max(0, progress)) * 0.42
     }
 
     // MARK: Title bar
@@ -136,8 +128,8 @@ struct OverlayView: View {
             Spacer(minLength: 0)
             Menu {
                 Picker("Прозрачность фона", selection: $settings.overlayOpacity) {
+                    Text("35%").tag(0.35)
                     Text("70%").tag(0.70)
-                    Text("85%").tag(0.85)
                     Text("100%").tag(1.0)
                 }
                 Divider()
