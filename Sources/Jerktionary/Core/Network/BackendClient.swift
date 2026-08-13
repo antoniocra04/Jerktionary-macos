@@ -310,7 +310,18 @@ struct BackendClient {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                        throw BackendError(message: "HTTP \(status)", status: status)
+                        // The body says which field was rejected and why; without
+                        // it a 422 reaches the user as a bare number.
+                        var body = ""
+                        for try await line in bytes.lines where body.count < 600 {
+                            body += line
+                        }
+                        throw BackendError(
+                            message: body.isEmpty
+                                ? "HTTP \(status)"
+                                : "HTTP \(status): \(String(body.prefix(600)))",
+                            status: status
+                        )
                     }
 
                     var sawSnapshot = false

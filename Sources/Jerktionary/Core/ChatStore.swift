@@ -265,14 +265,23 @@ final class ChatStore: ObservableObject {
         )
         touch(conversationID)
 
-        let conversation = conversations[index]
-        let wire = conversation.messages.map { message in
-            BackendClient.ChatWireMessage(
-                role: message.role.rawValue,
-                content: message.text,
-                images: message.attachments.map(\.dataURL)
-            )
-        }
+        // Re-read by id: `touch` re-sorts the array, so the index found above
+        // can now point at a different conversation entirely.
+        guard let conversation = conversation(id: conversationID) else { return }
+        // A turn that failed is kept on screen — the user should see what went
+        // wrong — but it holds no text, and a history with an empty turn in it
+        // is rejected outright. One failed answer used to wedge the whole
+        // conversation: every later message resent the empty turn and was
+        // refused before it ever reached a provider.
+        let wire = conversation.messages
+            .filter { !$0.text.isEmpty || !$0.attachments.isEmpty }
+            .map { message in
+                BackendClient.ChatWireMessage(
+                    role: message.role.rawValue,
+                    content: message.text,
+                    images: message.attachments.map(\.dataURL)
+                )
+            }
 
         streamingText = ""
         streamingConversationID = conversationID
