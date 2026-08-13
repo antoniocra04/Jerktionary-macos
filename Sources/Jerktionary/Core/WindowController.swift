@@ -8,6 +8,7 @@ import Foundation
 enum WindowController {
     static let overlaySize = NSSize(width: 520, height: 360)
     static let overlayMinSize = NSSize(width: 360, height: 220)
+    static let overlayMaxSize = NSSize(width: 900, height: 700)
     static let normalMinSize = NSSize(width: 1024, height: 680)
 
     /// Never the overlay panel: it is a separate window and must not receive

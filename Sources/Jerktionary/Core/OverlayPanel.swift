@@ -17,6 +17,12 @@ final class OverlayPanel {
     static let shared = OverlayPanel()
 
     private var panel: NSPanel?
+    /// The hosting view is kept and reused inside a plain container. Assigning a
+    /// fresh NSHostingView as the panel's contentView lets Auto Layout resize
+    /// the window to SwiftUI's fitting height, which grew the card to the full
+    /// height of the screen on every toggle.
+    private var host: NSHostingView<AnyView>?
+    private weak var sizeKeeper: OverlayFrameKeeper?
 
     private init() {}
 
@@ -26,7 +32,18 @@ final class OverlayPanel {
         let panel = self.panel ?? makePanel()
         self.panel = panel
 
-        panel.contentView = NSHostingView(rootView: AnyView(content))
+        if let host {
+            host.rootView = AnyView(content)
+        } else {
+            let container = NSView(frame: NSRect(origin: .zero, size: panel.frame.size))
+            let host = NSHostingView(rootView: AnyView(content))
+            host.translatesAutoresizingMaskIntoConstraints = true
+            host.frame = container.bounds
+            host.autoresizingMask = [.width, .height]
+            container.addSubview(host)
+            panel.contentView = container
+            self.host = host
+        }
         // Stealth applies here too: without it the card is the one part of the
         // app that would show up in a screen share.
         panel.sharingType = contentProtected ? .none : .readOnly
@@ -68,16 +85,31 @@ final class OverlayPanel {
         panel.hasShadow = false
         panel.isMovableByWindowBackground = true
         panel.minSize = WindowController.overlayMinSize
+        // A glance card, not a window: past this it stops being something you
+        // read out of the corner of your eye.
+        panel.maxSize = WindowController.overlayMaxSize
 
-        positionTopRight(panel)
+        let keeper = OverlayFrameKeeper()
+        panel.delegate = keeper
+        sizeKeeper = keeper
+        objc_setAssociatedObject(panel, &OverlayFrameKeeper.key, keeper, .OBJC_ASSOCIATION_RETAIN)
+
+        restoreFrame(panel)
         return panel
     }
 
-    /// Out of the way of what is usually being read, and clear of the menu bar.
-    private func positionTopRight(_ panel: NSPanel) {
+    /// Where it was left, else out of the way of what is being read. Remembering
+    /// this is the difference between placing the card once and placing it every
+    /// single launch.
+    private func restoreFrame(_ panel: NSPanel) {
+        let size = WindowController.overlaySize
+        if let saved = OverlayFrameKeeper.savedFrame(minWidth: WindowController.overlayMinSize.width),
+           NSScreen.screens.contains(where: { $0.visibleFrame.intersects(saved) }) {
+            panel.setFrame(saved, display: false)
+            return
+        }
         guard let screen = NSScreen.main else { return }
         let margin: CGFloat = 24
-        let size = WindowController.overlaySize
         panel.setFrame(
             NSRect(
                 x: screen.visibleFrame.maxX - size.width - margin,
@@ -87,6 +119,34 @@ final class OverlayPanel {
             ),
             display: false
         )
+    }
+
+}
+
+/// Remembers where and how big the card was left. Stored as a string so it needs
+/// nothing more than UserDefaults.
+@MainActor
+private final class OverlayFrameKeeper: NSObject, NSWindowDelegate {
+    static var key: UInt8 = 0
+    nonisolated static let defaultsKey = "settings.overlayFrame"
+
+    nonisolated static func savedFrame(minWidth: CGFloat) -> NSRect? {
+        guard let raw = UserDefaults.standard.string(forKey: defaultsKey) else { return nil }
+        let rect = NSRectFromString(raw)
+        return rect.width >= minWidth ? rect : nil
+    }
+
+    private func remember(_ window: NSWindow?) {
+        guard let window else { return }
+        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: Self.defaultsKey)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        remember(notification.object as? NSWindow)
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        remember(notification.object as? NSWindow)
     }
 }
 
