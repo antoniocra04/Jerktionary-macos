@@ -102,7 +102,10 @@ private struct MathNodeView: View {
         case .bigOperator(let glyph, let sub, let sup):
             VStack(spacing: 0) {
                 if let sup { MathNodeView(node: sup, size: scriptSize) }
-                Text(glyph).font(.system(size: size * 1.5))
+                // ∑ and ∫ are drawn oversized; a word like "lim" is set at the
+                // body size, or it shouts over the expression it introduces.
+                Text(glyph)
+                    .font(.system(size: glyph.count == 1 ? size * 1.5 : size))
                 if let sub { MathNodeView(node: sub, size: scriptSize) }
             }
             .fixedSize()

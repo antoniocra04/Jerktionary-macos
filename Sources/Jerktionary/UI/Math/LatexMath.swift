@@ -167,6 +167,9 @@ enum LatexParser {
         case .character(let character):
             if character == " " { return .space(0.28) }
             if character.isLetter { return .variable(String(character)) }
+            // U+2212, not the hyphen the source uses: next to a unary "−1" the
+            // shorter glyph reads as a different mark.
+            if character == "-" { return .symbol("−") }
             return .symbol(String(character))
 
         case .caret, .underscore:
@@ -283,22 +286,51 @@ enum LatexParser {
 
     // MARK: Helpers
 
-    /// Joins neighbouring digits and drops empty rows, so "12" is one run rather
-    /// than two and the layout has fewer nodes to place.
+    /// Joins neighbouring digits, binds a unary sign to the number it belongs to,
+    /// and drops empty rows.
     private static func merged(_ nodes: [MathNode]) -> [MathNode] {
         var result: [MathNode] = []
         for node in nodes {
-            if case .symbol(let value) = node,
-               value.count == 1, value.first!.isNumber || value == ".",
-               case .symbol(let previous)? = result.last,
+            if case .row(let children) = node, children.isEmpty { continue }
+
+            guard case .symbol(let value) = node, value.count == 1,
+                  value.first!.isNumber || value == "."
+            else {
+                result.append(node)
+                continue
+            }
+
+            // Digits of one number.
+            if case .symbol(let previous)? = result.last,
                previous.allSatisfy({ $0.isNumber || $0 == "." }) {
                 result[result.count - 1] = .symbol(previous + value)
                 continue
             }
-            if case .row(let children) = node, children.isEmpty { continue }
+            // A sign with no left operand is part of the number, not an operation
+            // between two: "−1", never "− 1".
+            if case .symbol(let sign)? = result.last, sign == "-" || sign == "−" || sign == "+",
+               isUnaryPosition(before: result.count - 1, in: result) {
+                result[result.count - 1] = .symbol((sign == "+" ? "+" : "−") + value)
+                continue
+            }
             result.append(node)
         }
         return result
+    }
+
+    /// True when nothing usable sits to the left, so the sign cannot be binary.
+    /// Spaces are skipped: "x \to -1" puts one between the arrow and the sign,
+    /// and stopping at it made every such minus look binary.
+    private static func isUnaryPosition(before index: Int, in nodes: [MathNode]) -> Bool {
+        var cursor = index - 1
+        while cursor >= 0, case .space = nodes[cursor] { cursor -= 1 }
+        guard cursor >= 0 else { return true }
+        guard case .symbol(let previous) = nodes[cursor] else { return false }
+        let binary: Set<String> = [
+            "=", "+", "-", "−", "×", "·", "÷", "±", "<", ">", "≤", "≥", "≠", "≈",
+            "→", "←", "↔", "⇒", "(", "[", ",", "∈", "∪", "∩"
+        ]
+        return binary.contains(previous)
     }
 
     static func flatten(_ node: MathNode) -> String {

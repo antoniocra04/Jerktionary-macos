@@ -63,7 +63,9 @@ enum InlineMath {
             text = text.replacingOccurrences(of: "\\" + command, with: "")
         }
 
+        text = fractions(in: text)
         text = roots(in: text)
+        text = limits(in: text)
         text = scripts(in: text, marker: "^", map: superscripts)
         text = scripts(in: text, marker: "_", map: subscriptsMap)
 
@@ -84,8 +86,81 @@ enum InlineMath {
     }()
 
     private static let bigOperators: [String: String] = [
-        "sum": "∑", "prod": "∏", "int": "∫", "oint": "∮", "bigcup": "⋃", "bigcap": "⋂"
+        "sum": "∑", "prod": "∏", "int": "∫", "oint": "∮", "bigcup": "⋃", "bigcap": "⋂",
+        "lim": "lim", "limsup": "lim sup", "liminf": "lim inf", "sup": "sup", "inf": "inf",
+        "to": "→"
     ]
+
+    /// Reads one `{…}` argument, or a single character when there are no braces.
+    /// Nesting is tracked so `\frac{a}{\frac{b}{c}}` does not stop at the inner
+    /// closing brace.
+    private static func argument(_ rest: inout Substring) -> String {
+        guard rest.first == "{" else {
+            guard let character = rest.first else { return "" }
+            rest = rest.dropFirst()
+            return String(character)
+        }
+        rest = rest.dropFirst()
+        var depth = 1
+        var body = ""
+        while let character = rest.first {
+            rest = rest.dropFirst()
+            if character == "{" { depth += 1 }
+            if character == "}" {
+                depth -= 1
+                if depth == 0 { break }
+            }
+            body.append(character)
+        }
+        return body
+    }
+
+    /// Brackets go on only where they change the reading: `f(x)/(x−1)`, not
+    /// `(f(x))/((x−1))`.
+    private static func bracketed(_ body: String) -> String {
+        guard body.count > 1 else { return body }
+        var depth = 0
+        for character in body {
+            if character == "(" || character == "[" { depth += 1 }
+            if character == ")" || character == "]" { depth -= 1 }
+            if depth == 0, "+-−±/·×".contains(character) { return "(\(body))" }
+        }
+        return body
+    }
+
+    /// `\frac{f(x)}{x-1}` becomes f(x)/(x−1). Stripping the braces without this
+    /// left "\dfracf(x)x-1" — the arguments run together and the division is gone.
+    private static func fractions(in text: String) -> String {
+        var result = text
+        for command in ["\\dfrac", "\\tfrac", "\\frac"] {
+            while let range = result.range(of: command) {
+                var rest = result[range.upperBound...]
+                let numerator = argument(&rest)
+                let denominator = argument(&rest)
+                let replacement = "\(bracketed(numerator))/\(bracketed(denominator))"
+                result = String(result[result.startIndex..<range.lowerBound])
+                    + replacement + String(rest)
+            }
+        }
+        return result
+    }
+
+    /// `lim_{x \to 1}` becomes lim(x→1). The generic script fallback would have
+    /// left `_` and a brace pair that the brace strip then removed, turning it
+    /// into a bare "lim_x → 1".
+    private static func limits(in text: String) -> String {
+        var result = text
+        for word in ["lim sup", "lim inf", "lim", "sup", "inf", "max", "min", "argmax", "argmin"] {
+            while let range = result.range(of: word + "_") {
+                var rest = result[range.upperBound...]
+                let body = argument(&rest).trimmingCharacters(in: .whitespaces)
+                let replacement = body.isEmpty ? word : "\(word)(\(body))"
+                result = String(result[result.startIndex..<range.lowerBound])
+                    + replacement + String(rest)
+            }
+        }
+        return result
+    }
 
     /// `\sqrt{x+1}` becomes √(x+1); the brackets are what keep it unambiguous
     /// once the radical has no bar over its content.
@@ -93,18 +168,7 @@ enum InlineMath {
         var result = text
         while let range = result.range(of: "\\sqrt") {
             var rest = result[range.upperBound...]
-            var body = ""
-            if rest.first == "{" {
-                rest = rest.dropFirst()
-                while let character = rest.first, character != "}" {
-                    body.append(character)
-                    rest = rest.dropFirst()
-                }
-                if rest.first == "}" { rest = rest.dropFirst() }
-            } else if let character = rest.first {
-                body.append(character)
-                rest = rest.dropFirst()
-            }
+            let body = argument(&rest)
             let wrapped = body.count > 1 ? "√(\(body))" : "√\(body)"
             result = String(result[result.startIndex..<range.lowerBound]) + wrapped + String(rest)
         }
@@ -146,8 +210,10 @@ enum InlineMath {
             if converted.count == run.count, !run.isEmpty {
                 result += String(converted)
             } else {
+                // Parentheses, not braces: braces are stripped a step later, and
+                // "lim_x → 1" is what that produced.
                 result.append(marker)
-                result += run.count == 1 ? run : "{\(run)}"
+                result += run.count == 1 ? run : "(\(run))"
             }
         }
         return result
