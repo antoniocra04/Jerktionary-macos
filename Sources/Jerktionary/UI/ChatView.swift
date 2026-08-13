@@ -212,6 +212,11 @@ struct ChatThreadView: View {
             // observe a past mutation, so drain the handoff on mount as well.
             drainPendingAttachments()
         }
+        .onChange(of: store.overlayMode) {
+            // The hidden main window stays mounted behind the overlay. Recheck
+            // ownership when the visible composer changes between windows.
+            drainPendingAttachments()
+        }
         .onChange(of: chatStore.transientError) {
             if let message = chatStore.transientError {
                 attachmentError = message
@@ -586,6 +591,11 @@ struct ChatThreadView: View {
     // MARK: Attachments
 
     private func drainPendingAttachments() {
+        // Both the normal chat and the overlay chat observe the same store even
+        // while one window is hidden. Only the composer the user can see may
+        // consume the handoff; otherwise the screenshot lands invisibly in the
+        // background window and Ctrl+Shift+S appears to do nothing.
+        guard compact == store.overlayMode else { return }
         guard !chatStore.pendingAttachments.isEmpty else { return }
         let pending = chatStore.pendingAttachments
         chatStore.pendingAttachments = []

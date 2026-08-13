@@ -25,7 +25,9 @@ final class GlobalHotkeys {
     }
 
     private var handlers: [Action: () -> Void] = [:]
-    private var hotKeyRefs: [EventHotKeyRef?] = []
+    private var hotKeyRefs: [Action: EventHotKeyRef] = [:]
+    private var failedActions: Set<Action> = []
+    private var retryTimer: Timer?
     private var eventHandler: EventHandlerRef?
 
     func register(_ handlers: [Action: () -> Void]) {
@@ -64,29 +66,58 @@ final class GlobalHotkeys {
             &eventHandler
         )
 
-        let modifiers = UInt32(controlKey | shiftKey)
-        for action in Action.allCases {
-            var hotKeyRef: EventHotKeyRef?
-            let hotKeyID = EventHotKeyID(signature: OSType(0x4A52_4B54), id: action.rawValue) // "JRKT"
-            RegisterEventHotKey(
-                action.keyCode,
-                modifiers,
-                hotKeyID,
-                GetApplicationEventTarget(),
-                0,
-                &hotKeyRef
-            )
-            hotKeyRefs.append(hotKeyRef)
+        failedActions = Set(Action.allCases.filter { !register($0) })
+        scheduleRetryIfNeeded()
+    }
+
+    /// A second copy can temporarily own the same Carbon hotkeys — notably
+    /// while replacing a development build with the installed app. Carbon
+    /// returns an error in that case, and the old implementation discarded it
+    /// forever. Retrying lets the surviving app claim the shortcuts as soon as
+    /// the competing process exits.
+    private func register(_ action: Action) -> Bool {
+        guard hotKeyRefs[action] == nil else { return true }
+
+        var hotKeyRef: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(
+            signature: OSType(0x4A52_4B54), // "JRKT"
+            id: action.rawValue
+        )
+        let status = RegisterEventHotKey(
+            action.keyCode,
+            UInt32(controlKey | shiftKey),
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
+        guard status == noErr, let hotKeyRef else { return false }
+        hotKeyRefs[action] = hotKeyRef
+        return true
+    }
+
+    private func scheduleRetryIfNeeded() {
+        guard !failedActions.isEmpty, retryTimer == nil else { return }
+        retryTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
+            guard let self else {
+                timer.invalidate()
+                return
+            }
+            self.failedActions = Set(self.failedActions.filter { !self.register($0) })
+            guard self.failedActions.isEmpty else { return }
+            timer.invalidate()
+            self.retryTimer = nil
         }
     }
 
     func unregisterAll() {
-        for ref in hotKeyRefs {
-            if let ref {
-                UnregisterEventHotKey(ref)
-            }
+        retryTimer?.invalidate()
+        retryTimer = nil
+        failedActions = []
+        for ref in hotKeyRefs.values {
+            UnregisterEventHotKey(ref)
         }
-        hotKeyRefs = []
+        hotKeyRefs = [:]
         if let eventHandler {
             RemoveEventHandler(eventHandler)
             self.eventHandler = nil
