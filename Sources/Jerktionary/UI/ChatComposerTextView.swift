@@ -131,9 +131,13 @@ struct ChatComposerTextView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.drawsBackground = false
         textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.placeholder = "Сообщение…"
         textView.setAccessibilityLabel("Сообщение")
+        textView.setAccessibilityPlaceholderValue("Сообщение…")
         textView.setAccessibilityHelp("Enter — отправить, Shift+Enter — перенос строки")
-        textView.textContainerInset = NSSize(width: 2, height: 6)
+        // With a 34pt single-line field, 8pt centers the system font and caret
+        // on the same horizontal axis as the two 30pt action buttons.
+        textView.textContainerInset = NSSize(width: 2, height: 8)
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
@@ -182,6 +186,47 @@ private final class ComposerScrollView: NSScrollView {
 /// view either drops it silently or inserts a placeholder character.
 final class PasteAwareTextView: NSTextView {
     var onPasteImages: (([ChatAttachment]) -> Void)?
+    var placeholder = "" {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty,
+              window?.firstResponder !== self,
+              !placeholder.isEmpty
+        else { return }
+
+        let linePadding = textContainer?.lineFragmentPadding ?? 0
+        let origin = NSPoint(
+            x: textContainerInset.width + linePadding,
+            y: textContainerInset.height
+        )
+        placeholder.draw(
+            at: origin,
+            withAttributes: [
+                .font: font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]
+        )
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        needsDisplay = true
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        needsDisplay = true
+        return accepted
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        needsDisplay = true
+    }
 
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general

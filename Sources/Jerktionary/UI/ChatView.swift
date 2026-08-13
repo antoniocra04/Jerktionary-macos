@@ -159,7 +159,6 @@ private struct ConversationRow: View {
 @MainActor
 final class ComposerDraft {
     var text = ""
-    var attachments: [ChatAttachment] = []
 }
 
 /// Also used by the compact overlay, which shows the thread on its own.
@@ -174,8 +173,10 @@ struct ChatThreadView: View {
     var compact = false
 
     @State private var draft = ComposerDraft()
-    /// Bumped when the attachment strip must redraw; the text itself never does.
-    @State private var attachmentTick = 0
+    /// Attachments are real SwiftUI state: unlike the continuously changing
+    /// text, they mutate rarely and must invalidate the empty composer on the
+    /// very first image selection.
+    @State private var attachments: [ChatAttachment] = []
     @State private var attachmentError: String?
     @State private var composerTextIsEmpty = true
     @State private var measuredComposerHeight: CGFloat = 0
@@ -424,14 +425,12 @@ struct ChatThreadView: View {
                         .help(status.message)
                 }
 
-                if !draft.attachments.isEmpty {
+                if !attachments.isEmpty {
                     AttachmentStrip(
-                        attachments: draft.attachments,
-                        tick: attachmentTick,
+                        attachments: attachments,
                         compact: compact
                     ) { id in
-                        draft.attachments.removeAll { $0.id == id }
-                        attachmentTick &+= 1
+                        attachments.removeAll { $0.id == id }
                     }
                 }
 
@@ -460,7 +459,7 @@ struct ChatThreadView: View {
     }
 
     private var composerInputRow: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
             Button {
                 pickImages()
             } label: {
@@ -475,30 +474,18 @@ struct ChatThreadView: View {
             .help("Прикрепить изображение")
             .accessibilityLabel("Прикрепить изображение")
 
-            ZStack(alignment: .topLeading) {
-                if composerTextIsEmpty {
-                    Text("Сообщение…")
-                        .font(.body)
-                        .foregroundStyle(.tertiary)
-                        .padding(.leading, 2)
-                        .padding(.top, 6)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-
-                ChatComposerTextView(
-                    documentID: conversationID,
-                    onEdit: { text in
-                        draft.text = text
-                        composerTextIsEmpty = text.isEmpty
-                    },
-                    onHeightChange: { measuredComposerHeight = $0 },
-                    onSubmit: submit,
-                    onPasteImages: add
-                )
-                .frame(height: composerHeight)
-            }
+            ChatComposerTextView(
+                documentID: conversationID,
+                onEdit: { text in
+                    draft.text = text
+                    composerTextIsEmpty = text.isEmpty
+                },
+                onHeightChange: { measuredComposerHeight = $0 },
+                onSubmit: submit,
+                onPasteImages: add
+            )
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: composerHeight)
 
             Button {
                 submit()
@@ -534,14 +521,14 @@ struct ChatThreadView: View {
     private var canSubmit: Bool {
         !chatStore.isStreaming
             && !submitting
-            && (!composerTextIsEmpty || !draft.attachments.isEmpty)
+            && (!composerTextIsEmpty || !attachments.isEmpty)
     }
 
     private var composerStatus: (message: String, systemImage: String, color: Color)? {
         if let attachmentError {
             return (attachmentError, "exclamationmark.circle.fill", .red)
         }
-        if chatStore.capabilities.refusesImages, !draft.attachments.isEmpty {
+        if chatStore.capabilities.refusesImages, !attachments.isEmpty {
             return (
                 "Модель \(chatStore.capabilities.model) не принимает изображения — выберите другую.",
                 "exclamationmark.triangle.fill",
@@ -553,7 +540,7 @@ struct ChatThreadView: View {
 
     private func submit() {
         guard !chatStore.isStreaming, !submitting else { return }
-        guard !draft.attachments.isEmpty else {
+        guard !attachments.isEmpty else {
             performSend()
             return
         }
@@ -580,15 +567,14 @@ struct ChatThreadView: View {
         chatStore.send(
             conversationID: conversationID,
             text: draft.text,
-            attachments: draft.attachments,
+            attachments: attachments,
             client: store.backendClient,
             systemPrompt: settings.chatSystemPrompt
         )
         draft.text = ""
         composerTextIsEmpty = true
-        draft.attachments = []
+        attachments = []
         attachmentError = nil
-        attachmentTick &+= 1
         NotificationCenter.default.post(name: .chatComposerShouldClear, object: conversationID)
     }
 
@@ -596,14 +582,13 @@ struct ChatThreadView: View {
 
     private func add(_ new: [ChatAttachment]) {
         guard !new.isEmpty else { return }
-        let room = ChatImageLoader.maxPerMessage - draft.attachments.count
+        let room = ChatImageLoader.maxPerMessage - attachments.count
         if room <= 0 {
             attachmentError = "Не больше \(ChatImageLoader.maxPerMessage) изображений в сообщении."
             return
         }
         attachmentError = nil
-        draft.attachments.append(contentsOf: new.prefix(room))
-        attachmentTick &+= 1
+        attachments.append(contentsOf: new.prefix(room))
     }
 
     private func pickImages() {
@@ -611,8 +596,25 @@ struct ChatThreadView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.png, .jpeg, .gif, .webP]
-        guard panel.runModal() == .OK else { return }
-        let urls = panel.urls
+
+        let completion: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK else { return }
+            importImages(from: panel.urls)
+        }
+
+        // `runModal()` is unreliable while stealth mode makes the app an
+        // accessory application and the overlay a non-activating NSPanel. A
+        // sheet belongs to the window the user clicked, so it works without
+        // changing activation policy or briefly revealing a Dock icon.
+        if let presentingWindow = NSApp.keyWindow ?? WindowController.mainWindow {
+            panel.beginSheetModal(for: presentingWindow, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
+        }
+    }
+
+    private func importImages(from urls: [URL]) {
+        guard !urls.isEmpty else { return }
         Task {
             do {
                 let attachments = try await Task.detached(priority: .userInitiated) {
@@ -649,7 +651,7 @@ private struct MessageBubble: View {
                 .foregroundStyle(message.role == .user ? Color.secondary : Theme.tint)
 
             if !message.attachments.isEmpty {
-                AttachmentStrip(attachments: message.attachments, tick: 0, onRemove: nil)
+                AttachmentStrip(attachments: message.attachments, onRemove: nil)
             }
 
             if let error = message.error {
@@ -705,7 +707,6 @@ private struct StreamingBubble: View {
 
 private struct AttachmentStrip: View {
     let attachments: [ChatAttachment]
-    let tick: Int
     var compact = false
     var onRemove: ((String) -> Void)?
 
