@@ -80,6 +80,11 @@ struct MarkdownView: View {
                 )
                 .textSelection(.enabled)
 
+        case .math(let latex):
+            MathView(latex: latex, size: 17)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
+
         case .rule:
             Divider()
         }
@@ -97,6 +102,7 @@ struct MarkdownView: View {
     /// Inline markdown (bold/italic/code/links), preserving whitespace and soft
     /// line breaks. Falls back to plain text if parsing fails.
     static func inline(_ string: String) -> Text {
+        let string = InlineMath.render(in: string)
         if let attributed = try? AttributedString(
             markdown: string,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -111,6 +117,8 @@ struct MarkdownView: View {
 
 enum MarkdownBlock {
     case heading(level: Int, text: String)
+    /// A formula on its own line — `$$…$$` or `\[…\]`.
+    case math(String)
     case paragraph(String)
     case unorderedList([String])
     case orderedList([String])
@@ -154,6 +162,36 @@ enum MarkdownParser {
         while index < lines.count {
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Display formula, either fenced by $$ or by \[ \].
+            if let opener = MarkdownParser.displayMathOpener(trimmed) {
+                flushAll()
+                var latex: [String] = []
+                var closed = false
+                // Single-line form: $$ x $$ on one line.
+                if let inline = MarkdownParser.singleLineDisplayMath(trimmed, opener: opener) {
+                    blocks.append(.math(inline))
+                    index += 1
+                    continue
+                }
+                index += 1
+                while index < lines.count {
+                    let candidate = lines[index].trimmingCharacters(in: .whitespaces)
+                    if candidate.hasSuffix(opener.close) {
+                        latex.append(String(candidate.dropLast(opener.close.count)))
+                        closed = true
+                        index += 1
+                        break
+                    }
+                    latex.append(lines[index])
+                    index += 1
+                }
+                let body = latex.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                if closed || !body.isEmpty {
+                    blocks.append(.math(body))
+                }
+                continue
+            }
 
             // Fenced code block.
             if trimmed.hasPrefix("```") {
@@ -226,6 +264,23 @@ enum MarkdownParser {
 
         flushAll()
         return blocks
+    }
+
+    struct MathFence {
+        let open: String
+        let close: String
+    }
+
+    static func displayMathOpener(_ line: String) -> MathFence? {
+        if line.hasPrefix("$$") { return MathFence(open: "$$", close: "$$") }
+        if line.hasPrefix("\\[") { return MathFence(open: "\\[", close: "\\]") }
+        return nil
+    }
+
+    static func singleLineDisplayMath(_ line: String, opener: MathFence) -> String? {
+        let body = line.dropFirst(opener.open.count)
+        guard body.hasSuffix(opener.close), body.count > opener.close.count else { return nil }
+        return String(body.dropLast(opener.close.count)).trimmingCharacters(in: .whitespaces)
     }
 
     private static func matchHeading(_ line: String) -> (level: Int, text: String)? {

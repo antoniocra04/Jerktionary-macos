@@ -66,11 +66,22 @@ struct ChatComposerTextView: NSViewRepresentable {
             _ textView: NSTextView,
             doCommandBy selector: Selector
         ) -> Bool {
-            guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
-            // Shift+Enter arrives as insertNewlineIgnoringFieldEditor, so plain
-            // insertNewline here always means "send".
-            onSubmit()
-            return true
+            // Shift+Enter and Enter both arrive as insertNewline: — the modifier
+            // is only visible on the event, so it has to be read from there.
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
+                    return false // let the text view break the line
+                }
+                onSubmit()
+                return true
+            }
+            // Some layouts and input sources send this one for Shift+Return.
+            if selector == #selector(NSResponder.insertLineBreak(_:))
+                || selector == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)) {
+                textView.insertText("\n", replacementRange: textView.selectedRange())
+                return true
+            }
+            return false
         }
     }
 

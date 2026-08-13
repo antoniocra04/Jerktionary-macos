@@ -98,9 +98,9 @@ final class OverlayPanel {
         return panel
     }
 
-    /// Where it was left, else out of the way of what is being read. Remembering
-    /// this is the difference between placing the card once and placing it every
-    /// single launch.
+    /// Where it was left, else centred near the top of the screen — close to
+    /// where the eyes already are during a call, so glancing at it costs less of
+    /// a head turn than a corner would.
     private func restoreFrame(_ panel: NSPanel) {
         let size = WindowController.overlaySize
         if let saved = OverlayFrameKeeper.savedFrame(minWidth: WindowController.overlayMinSize.width),
@@ -109,11 +109,12 @@ final class OverlayPanel {
             return
         }
         guard let screen = NSScreen.main else { return }
-        let margin: CGFloat = 24
+        let visible = screen.visibleFrame
+        let topMargin: CGFloat = 12
         panel.setFrame(
             NSRect(
-                x: screen.visibleFrame.maxX - size.width - margin,
-                y: screen.visibleFrame.maxY - size.height - margin,
+                x: visible.midX - size.width / 2,
+                y: visible.maxY - size.height - topMargin,
                 width: size.width,
                 height: size.height
             ),
