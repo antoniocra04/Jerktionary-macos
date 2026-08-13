@@ -12,29 +12,40 @@ struct ChatComposerTextView: NSViewRepresentable {
     /// Clears the field when it changes — a different conversation is open.
     let documentID: String
     let onEdit: (String) -> Void
+    let onHeightChange: (CGFloat) -> Void
     let onSubmit: () -> Void
     let onPasteImages: ([ChatAttachment]) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(documentID: documentID, onEdit: onEdit, onSubmit: onSubmit, onPaste: onPasteImages)
+        Coordinator(
+            documentID: documentID,
+            onEdit: onEdit,
+            onHeightChange: onHeightChange,
+            onSubmit: onSubmit,
+            onPaste: onPasteImages
+        )
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var documentID: String
         var onEdit: (String) -> Void
+        var onHeightChange: (CGFloat) -> Void
         var onSubmit: () -> Void
         var onPaste: ([ChatAttachment]) -> Void
         var observer: NSObjectProtocol?
         weak var textView: NSTextView?
+        private var lastReportedHeight: CGFloat = 0
 
         init(
             documentID: String,
             onEdit: @escaping (String) -> Void,
+            onHeightChange: @escaping (CGFloat) -> Void,
             onSubmit: @escaping () -> Void,
             onPaste: @escaping ([ChatAttachment]) -> Void
         ) {
             self.documentID = documentID
             self.onEdit = onEdit
+            self.onHeightChange = onHeightChange
             self.onSubmit = onSubmit
             self.onPaste = onPaste
             super.init()
@@ -47,6 +58,7 @@ struct ChatComposerTextView: NSViewRepresentable {
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.textView?.string = ""
+                    self?.reportHeight()
                 }
             }
         }
@@ -60,6 +72,22 @@ struct ChatComposerTextView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             onEdit(textView.string)
+            reportHeight()
+        }
+
+        func reportHeight() {
+            guard let textView,
+                  let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer
+            else { return }
+            layoutManager.ensureLayout(for: textContainer)
+            let contentHeight = ceil(
+                layoutManager.usedRect(for: textContainer).height
+                    + textView.textContainerInset.height * 2
+            )
+            guard abs(contentHeight - lastReportedHeight) >= 0.5 else { return }
+            lastReportedHeight = contentHeight
+            onHeightChange(contentHeight)
         }
 
         func textView(
@@ -89,7 +117,7 @@ struct ChatComposerTextView: NSViewRepresentable {
     /// hardcodes a plain NSTextView and leaves no way to install the paste-aware
     /// subclass.
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = ComposerScrollView()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -113,18 +141,40 @@ struct ChatComposerTextView: NSViewRepresentable {
             width: 0, height: CGFloat.greatestFiniteMagnitude
         )
         scrollView.documentView = textView
+        scrollView.onLayout = { [coordinator = context.coordinator] in
+            // AppKit may lay out while SwiftUI is updating this representable;
+            // defer the scalar state change to the next main-loop turn.
+            DispatchQueue.main.async {
+                coordinator.reportHeight()
+            }
+        }
         context.coordinator.textView = textView
+        DispatchQueue.main.async { [coordinator = context.coordinator] in
+            coordinator.reportHeight()
+        }
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let coordinator = context.coordinator
         coordinator.onEdit = onEdit
+        coordinator.onHeightChange = onHeightChange
         coordinator.onSubmit = onSubmit
         coordinator.onPaste = onPasteImages
         guard coordinator.documentID != documentID else { return }
         coordinator.documentID = documentID
         (scrollView.documentView as? NSTextView)?.string = ""
+    }
+}
+
+/// Notifies the representable when its width changes so wrapping can update the
+/// composer's height without putting the whole draft into SwiftUI state.
+private final class ComposerScrollView: NSScrollView {
+    var onLayout: (() -> Void)?
+
+    override func layout() {
+        super.layout()
+        onLayout?()
     }
 }
 

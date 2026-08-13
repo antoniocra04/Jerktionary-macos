@@ -177,6 +177,8 @@ struct ChatThreadView: View {
     /// Bumped when the attachment strip must redraw; the text itself never does.
     @State private var attachmentTick = 0
     @State private var attachmentError: String?
+    @State private var composerTextIsEmpty = true
+    @State private var measuredComposerHeight: CGFloat = 0
     /// Set while the pre-send capability check is in flight, so a second Enter
     /// can't start the same message twice before streaming has begun.
     @State private var submitting = false
@@ -412,73 +414,36 @@ struct ChatThreadView: View {
     // MARK: Composer
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let attachmentError {
-                Text(attachmentError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(compact ? 2 : nil)
-                    .help(attachmentError)
-            }
-
-            if chatStore.capabilities.refusesImages, !draft.attachments.isEmpty {
-                Label(
-                    "Модель \(chatStore.capabilities.model) не принимает изображения — выберите другую в списке моделей.",
-                    systemImage: "exclamationmark.triangle.fill"
-                )
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !draft.attachments.isEmpty {
-                AttachmentStrip(
-                    attachments: draft.attachments,
-                    tick: attachmentTick,
-                    compact: compact
-                ) { id in
-                    draft.attachments.removeAll { $0.id == id }
-                    attachmentTick &+= 1
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: compact ? 6 : 8) {
+                if let status = composerStatus {
+                    Label(status.message, systemImage: status.systemImage)
+                        .font(.caption)
+                        .foregroundStyle(status.color)
+                        .lineLimit(compact ? 2 : 3)
+                        .help(status.message)
                 }
-            }
 
-            HStack(alignment: .bottom, spacing: 10) {
-                Button {
-                    pickImages()
-                } label: {
-                    Image(systemName: "photo.badge.plus")
+                if !draft.attachments.isEmpty {
+                    AttachmentStrip(
+                        attachments: draft.attachments,
+                        tick: attachmentTick,
+                        compact: compact
+                    ) { id in
+                        draft.attachments.removeAll { $0.id == id }
+                        attachmentTick &+= 1
+                    }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("Прикрепить изображение")
-                .accessibilityLabel("Прикрепить изображение")
 
-                ChatComposerTextView(
-                    documentID: conversationID,
-                    onEdit: { draft.text = $0 },
-                    onSubmit: submit,
-                    onPasteImages: add
-                )
-                .frame(minHeight: compact ? 26 : 34, maxHeight: compact ? 72 : 120)
-
-                Button {
-                    submit()
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 22))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(chatStore.isStreaming ? Color.secondary : Theme.tint)
-                .disabled(chatStore.isStreaming)
-                .help("Отправить (Enter)")
-                .accessibilityLabel("Отправить")
+                composerInputRow
             }
-            .padding(10)
+            .padding(compact ? 8 : 10)
             .background(
                 Theme.tint.opacity(0.06),
                 in: RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
             )
-            // Dropping onto the composer is the same path as the picker and paste.
+            // Dropping onto any part of the compound composer follows the same
+            // path as the picker and paste.
             .onDrop(of: [.fileURL, .image], isTargeted: nil) { providers in
                 load(providers)
                 return true
@@ -492,6 +457,98 @@ struct ChatThreadView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var composerInputRow: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            Button {
+                pickImages()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 30, height: 30)
+                    .background(Theme.card.opacity(0.78), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Прикрепить изображение")
+            .accessibilityLabel("Прикрепить изображение")
+
+            ZStack(alignment: .topLeading) {
+                if composerTextIsEmpty {
+                    Text("Сообщение…")
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 2)
+                        .padding(.top, 6)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+
+                ChatComposerTextView(
+                    documentID: conversationID,
+                    onEdit: { text in
+                        draft.text = text
+                        composerTextIsEmpty = text.isEmpty
+                    },
+                    onHeightChange: { measuredComposerHeight = $0 },
+                    onSubmit: submit,
+                    onPasteImages: add
+                )
+                .frame(height: composerHeight)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                submit()
+            } label: {
+                Group {
+                    if submitting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                }
+                .frame(width: 30, height: 30)
+                .foregroundStyle(canSubmit ? Color.white : Color.secondary)
+                .background(canSubmit ? Theme.tint : Theme.card.opacity(0.78), in: Circle())
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSubmit)
+            .help("Отправить (Enter)")
+            .accessibilityLabel("Отправить")
+        }
+    }
+
+    private var composerHeight: CGFloat {
+        let minimum: CGFloat = compact ? 30 : 34
+        let maximum: CGFloat = compact ? 72 : 120
+        return min(max(measuredComposerHeight, minimum), maximum)
+    }
+
+    private var canSubmit: Bool {
+        !chatStore.isStreaming
+            && !submitting
+            && (!composerTextIsEmpty || !draft.attachments.isEmpty)
+    }
+
+    private var composerStatus: (message: String, systemImage: String, color: Color)? {
+        if let attachmentError {
+            return (attachmentError, "exclamationmark.circle.fill", .red)
+        }
+        if chatStore.capabilities.refusesImages, !draft.attachments.isEmpty {
+            return (
+                "Модель \(chatStore.capabilities.model) не принимает изображения — выберите другую.",
+                "exclamationmark.triangle.fill",
+                .orange
+            )
+        }
+        return nil
     }
 
     private func submit() {
@@ -528,6 +585,7 @@ struct ChatThreadView: View {
             systemPrompt: settings.chatSystemPrompt
         )
         draft.text = ""
+        composerTextIsEmpty = true
         draft.attachments = []
         attachmentError = nil
         attachmentTick &+= 1
