@@ -129,6 +129,13 @@ enum LatexParser {
     ) -> MathNode? {
         guard var base = parseAtom(&tokens, stopAt: terminator) else { return nil }
 
+        // `\lim\limits_{…}` puts a sizing hint between the operator and its
+        // script; without skipping it the script attaches to the hint instead.
+        while case .command(let name)? = tokens.first,
+              name == "limits" || name == "nolimits" || name == "displaystyle" {
+            tokens = tokens.dropFirst()
+        }
+
         var sub: MathNode?
         var sup: MathNode?
         while let token = tokens.first, token == .caret || token == .underscore {

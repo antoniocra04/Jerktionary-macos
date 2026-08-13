@@ -52,15 +52,12 @@ enum InlineMath {
     static func transliterate(_ latex: String) -> String {
         var text = latex
 
-        // Longest first, always. Iterating a dictionary put `\le` before `\leq`
-        // often enough to turn "≤" into "≤q", and `\in` before `\infty` to turn
-        // "∞" into "∈fty" — with the order depending on the hash seed, so it
-        // changed between runs.
+        // One ordered pass over every command, longest name first. Two passes
+        // could not work: the commands that map to nothing were replaced second,
+        // so `\lim` had already eaten the front of `\limits` ("limlimits") and
+        // `\le` the front of `\left` ("≤ft").
         for (name, glyph) in Self.replacements {
             text = text.replacingOccurrences(of: "\\" + name, with: glyph)
-        }
-        for command in ["left", "right", "displaystyle", "limits", "mathrm", "text", "mathbf"] {
-            text = text.replacingOccurrences(of: "\\" + command, with: "")
         }
 
         text = fractions(in: text)
@@ -76,14 +73,23 @@ enum InlineMath {
         return text.trimmingCharacters(in: .whitespaces)
     }
 
-    /// Every command this can render, longest name first so no name can be
-    /// swallowed by a shorter one that happens to be its prefix.
-    private static let replacements: [(String, String)] = {
+    /// Every command this handles, longest name first so no name can be eaten by
+    /// a shorter one that happens to be its prefix. Commands that only affect
+    /// typesetting map to an empty string and take part in the same ordering.
+    static let replacements: [(String, String)] = {
         var all = Symbols.table
         all.merge(Symbols.functions) { current, _ in current }
         all.merge(bigOperators) { current, _ in current }
+        all.merge(dropped) { current, _ in current }
         return all.sorted { $0.key.count > $1.key.count }.map { ($0.key, $0.value) }
     }()
+
+    /// Typesetting hints with no textual meaning.
+    private static let dropped: [String: String] = [
+        "left": "", "right": "", "displaystyle": "", "limits": "", "nolimits": "",
+        "mathrm": "", "text": "", "mathbf": "", "mathit": "", "mathsf": "",
+        "big": "", "Big": "", "bigg": "", "Bigg": "", "operatorname": ""
+    ]
 
     private static let bigOperators: [String: String] = [
         "sum": "∑", "prod": "∏", "int": "∫", "oint": "∮", "bigcup": "⋃", "bigcap": "⋂",
