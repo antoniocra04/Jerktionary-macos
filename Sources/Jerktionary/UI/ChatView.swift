@@ -204,9 +204,13 @@ struct ChatThreadView: View {
         .onChange(of: chatStore.pendingAttachments) {
             // Handed over by the screenshot hotkey, which has no access to the
             // draft; taking them here keeps one owner for the composer state.
-            guard !chatStore.pendingAttachments.isEmpty else { return }
-            add(chatStore.pendingAttachments)
-            chatStore.pendingAttachments = []
+            drainPendingAttachments()
+        }
+        .onAppear {
+            // When the shortcut changes the overlay from another pane to Chat,
+            // the image can arrive before this composer exists. onChange cannot
+            // observe a past mutation, so drain the handoff on mount as well.
+            drainPendingAttachments()
         }
         .onChange(of: chatStore.transientError) {
             if let message = chatStore.transientError {
@@ -482,7 +486,8 @@ struct ChatThreadView: View {
                 },
                 onHeightChange: { measuredComposerHeight = $0 },
                 onSubmit: submit,
-                onPasteImages: add
+                onPasteImages: add,
+                onCaptureScreenshot: store.captureScreenshotToChat
             )
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: composerHeight)
@@ -579,6 +584,13 @@ struct ChatThreadView: View {
     }
 
     // MARK: Attachments
+
+    private func drainPendingAttachments() {
+        guard !chatStore.pendingAttachments.isEmpty else { return }
+        let pending = chatStore.pendingAttachments
+        chatStore.pendingAttachments = []
+        add(pending)
+    }
 
     private func add(_ new: [ChatAttachment]) {
         guard !new.isEmpty else { return }

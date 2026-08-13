@@ -15,6 +15,7 @@ struct ChatComposerTextView: NSViewRepresentable {
     let onHeightChange: (CGFloat) -> Void
     let onSubmit: () -> Void
     let onPasteImages: ([ChatAttachment]) -> Void
+    let onCaptureScreenshot: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -22,7 +23,8 @@ struct ChatComposerTextView: NSViewRepresentable {
             onEdit: onEdit,
             onHeightChange: onHeightChange,
             onSubmit: onSubmit,
-            onPaste: onPasteImages
+            onPaste: onPasteImages,
+            onCaptureScreenshot: onCaptureScreenshot
         )
     }
 
@@ -32,6 +34,7 @@ struct ChatComposerTextView: NSViewRepresentable {
         var onHeightChange: (CGFloat) -> Void
         var onSubmit: () -> Void
         var onPaste: ([ChatAttachment]) -> Void
+        var onCaptureScreenshot: () -> Void
         var observer: NSObjectProtocol?
         weak var textView: NSTextView?
         private var lastReportedHeight: CGFloat = 0
@@ -41,13 +44,15 @@ struct ChatComposerTextView: NSViewRepresentable {
             onEdit: @escaping (String) -> Void,
             onHeightChange: @escaping (CGFloat) -> Void,
             onSubmit: @escaping () -> Void,
-            onPaste: @escaping ([ChatAttachment]) -> Void
+            onPaste: @escaping ([ChatAttachment]) -> Void,
+            onCaptureScreenshot: @escaping () -> Void
         ) {
             self.documentID = documentID
             self.onEdit = onEdit
             self.onHeightChange = onHeightChange
             self.onSubmit = onSubmit
             self.onPaste = onPaste
+            self.onCaptureScreenshot = onCaptureScreenshot
             super.init()
             // The composer is cleared by the view that owns the draft, which has
             // no reference to this text view.
@@ -126,6 +131,9 @@ struct ChatComposerTextView: NSViewRepresentable {
         textView.onPasteImages = { [coordinator = context.coordinator] attachments in
             coordinator.onPaste(attachments)
         }
+        textView.onCaptureScreenshot = { [coordinator = context.coordinator] in
+            coordinator.onCaptureScreenshot()
+        }
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = true
@@ -165,6 +173,7 @@ struct ChatComposerTextView: NSViewRepresentable {
         coordinator.onHeightChange = onHeightChange
         coordinator.onSubmit = onSubmit
         coordinator.onPaste = onPasteImages
+        coordinator.onCaptureScreenshot = onCaptureScreenshot
         guard coordinator.documentID != documentID else { return }
         coordinator.documentID = documentID
         (scrollView.documentView as? NSTextView)?.string = ""
@@ -186,6 +195,7 @@ private final class ComposerScrollView: NSScrollView {
 /// view either drops it silently or inserts a placeholder character.
 final class PasteAwareTextView: NSTextView {
     var onPasteImages: (([ChatAttachment]) -> Void)?
+    var onCaptureScreenshot: (() -> Void)?
     var placeholder = "" {
         didSet { needsDisplay = true }
     }
@@ -226,6 +236,23 @@ final class PasteAwareTextView: NSTextView {
     override func didChangeText() {
         super.didChangeText()
         needsDisplay = true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Carbon owns the global shortcut in the normal case. A focused text
+        // view inside a non-activating panel can receive the raw key event
+        // instead, so handle that one path locally. When Carbon consumes it,
+        // keyDown is never called and the capture still happens exactly once.
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let isScreenshotShortcut = !event.isARepeat
+            && modifiers.contains([.control, .shift])
+            && modifiers.isDisjoint(with: [.command, .option])
+            && event.charactersIgnoringModifiers?.lowercased() == "s"
+        if isScreenshotShortcut {
+            onCaptureScreenshot?()
+            return
+        }
+        super.keyDown(with: event)
     }
 
     override func paste(_ sender: Any?) {
