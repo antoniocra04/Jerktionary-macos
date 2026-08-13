@@ -314,23 +314,82 @@ struct OverlayView: View {
 
     // MARK: Chat and transcript
 
-    @ViewBuilder
     private var chatPane: some View {
-        if let id = chats.selectedID, chats.conversation(id: id) != nil {
-            ChatThreadView(conversationID: id, compact: true)
-                .id(id)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 8)
-                .frame(maxWidth: .infinity)
-        } else {
-            VStack(spacing: 10) {
-                hint("Здесь можно спросить что угодно текстом", icon: "bubble.left.and.bubble.right")
-                Button("Начать чат") { chats.create() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .padding(.bottom, 16)
+        VStack(spacing: 0) {
+            overlayChatBar
+
+            Group {
+                if let id = chats.selectedID, chats.conversation(id: id) != nil {
+                    ChatThreadView(conversationID: id, compact: true)
+                        .id(id)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 8)
+                } else {
+                    hint(
+                        "Выберите существующий чат или создайте новый",
+                        icon: "bubble.left.and.bubble.right"
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var overlayChatBar: some View {
+        HStack(spacing: 6) {
+            Menu {
+                Button("Новый чат", systemImage: "square.and.pencil") {
+                    chats.create()
+                }
+
+                if !chats.conversations.isEmpty {
+                    Divider()
+                    ForEach(chats.conversations) { conversation in
+                        Button {
+                            chats.selectedID = conversation.id
+                        } label: {
+                            Label(
+                                "\(conversation.displayTitle) · \(ChatStore.formatDate(conversation.updatedAt))",
+                                systemImage: conversation.id == chats.selectedID
+                                    ? "checkmark"
+                                    : "bubble.left"
+                            )
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                    Text(selectedChatTitle)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize(horizontal: false, vertical: true)
+            .help("Переключить чат")
+            .accessibilityLabel("Текущий чат: \(selectedChatTitle). Переключить чат")
+
+            OverlayIconButton(systemImage: "square.and.pencil", label: "Новый чат") {
+                chats.create()
             }
         }
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 5)
+        .background(.primary.opacity(0.04))
+    }
+
+    private var selectedChatTitle: String {
+        guard let id = chats.selectedID,
+              let conversation = chats.conversation(id: id)
+        else { return "Выберите чат" }
+        return conversation.displayTitle
     }
 
     @ViewBuilder
