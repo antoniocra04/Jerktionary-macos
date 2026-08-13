@@ -90,6 +90,42 @@ extension AppStore {
         }
     }
 
+    /// Routes a captured image into the chat and makes sure the place it lands
+    /// is actually on screen.
+    ///
+    /// Showing the chat means two different things depending on the mode, and
+    /// setting only `mainTab` was the bug: in the compact card the main window
+    /// is hidden and the card shows `overlayPane`, so a screenshot taken while
+    /// the card sat on Ответ or Транскрипт went into `pendingAttachments` with
+    /// no composer mounted to take it. Nothing appeared, and the hotkey looked
+    /// dead.
+    func deliverToChat(_ attachment: ChatAttachment) async {
+        let conversation = chats.currentOrNewConversation()
+        mainTab = .chat
+        if OverlayPanel.shared.isVisible {
+            settings.overlayPane = .chat
+        }
+
+        let prompt = settings.chatScreenshotPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else {
+            chats.pendingAttachments.append(attachment)
+            return
+        }
+
+        await chats.ensureCapabilities(client: backendClient, model: conversation.model)
+        guard !chats.capabilities.refusesImages else {
+            chats.pendingAttachments.append(attachment)
+            return
+        }
+        chats.send(
+            conversationID: conversation.id,
+            text: prompt,
+            attachments: [attachment],
+            client: backendClient,
+            systemPrompt: settings.chatSystemPrompt
+        )
+    }
+
     /// Ctrl+Shift+S: grab the screen into the chat without showing anything.
     ///
     /// Nothing is brought forward and no window is touched — the whole point is
@@ -111,27 +147,7 @@ extension AppStore {
                 return
             }
 
-            let conversation = chats.currentOrNewConversation()
-            mainTab = .chat
-
-            let prompt = settings.chatScreenshotPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !prompt.isEmpty else {
-                chats.pendingAttachments.append(attachment)
-                return
-            }
-
-            await chats.ensureCapabilities(client: backendClient, model: conversation.model)
-            guard !chats.capabilities.refusesImages else {
-                chats.pendingAttachments.append(attachment)
-                return
-            }
-            chats.send(
-                conversationID: conversation.id,
-                text: prompt,
-                attachments: [attachment],
-                client: backendClient,
-                systemPrompt: settings.chatSystemPrompt
-            )
+            await deliverToChat(attachment)
         }
     }
 }
