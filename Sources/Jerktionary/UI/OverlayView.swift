@@ -62,17 +62,34 @@ struct OverlayView: View {
         if reduceTransparency {
             Theme.canvas
         } else {
-            Rectangle().fill(.ultraThinMaterial).opacity(settings.overlayOpacity)
+            ZStack {
+                Rectangle().fill(.regularMaterial)
+                Rectangle().fill(Theme.card.opacity(overlayScrimOpacity))
+            }
         }
+    }
+
+    private var overlayScrimOpacity: Double {
+        let range = AppSettings.overlayOpacityRange
+        let progress = (settings.overlayOpacity - range.lowerBound) /
+            (range.upperBound - range.lowerBound)
+        return 0.18 + min(1, max(0, progress)) * 0.42
     }
 
     // MARK: Title bar
 
     private var titleBar: some View {
+        ViewThatFits(in: .horizontal) {
+            fullTitleBar
+            compactTitleBar
+        }
+    }
+
+    private var fullTitleBar: some View {
         HStack(spacing: 6) {
             StatusLight(state: store.overlayStatus)
 
-            PaneTabs(selection: paneBinding, badged: badgedPane)
+            PaneTabs(selection: paneBinding, badged: badgedPane, compact: false)
                 .layoutPriority(1)
 
             Spacer(minLength: 2)
@@ -111,6 +128,48 @@ struct OverlayView: View {
         .contentShape(Rectangle())
     }
 
+    private var compactTitleBar: some View {
+        HStack(spacing: 5) {
+            StatusLight(state: store.overlayStatus)
+            PaneTabs(selection: paneBinding, badged: badgedPane, compact: true)
+                .layoutPriority(1)
+            Spacer(minLength: 0)
+            Menu {
+                Picker("Прозрачность фона", selection: $settings.overlayOpacity) {
+                    Text("70%").tag(0.70)
+                    Text("85%").tag(0.85)
+                    Text("100%").tag(1.0)
+                }
+                Divider()
+                Button(store.contentProtectionEnabled
+                       ? "Показывать при захвате экрана"
+                       : "Скрыть при захвате экрана") {
+                    store.contentProtectionEnabled.toggle()
+                    WindowController.setContentProtection(store.contentProtectionEnabled)
+                }
+                Button("Развернуть в обычное окно") {
+                    store.toggleOverlay()
+                }
+            } label: {
+                Label("Параметры карточки", systemImage: "ellipsis.circle")
+            }
+            .labelStyle(.iconOnly)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Параметры карточки")
+
+            OverlayIconButton(
+                systemImage: "xmark",
+                label: "Спрятать карточку. Вернуть — Ctrl+Shift+O"
+            ) {
+                store.hideOverlay()
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+
     /// Which tab should show that something arrived behind the user's back.
     private var badgedPane: OverlayPane? {
         guard settings.overlayPane != .answer,
@@ -125,7 +184,7 @@ struct OverlayView: View {
                 .foregroundStyle(.orange)
             Text(fault)
                 .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
             Spacer(minLength: 0)
         }
         .font(.caption)
@@ -133,6 +192,10 @@ struct OverlayView: View {
         .padding(.vertical, 6)
         .background(.orange.opacity(0.16))
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("Сбой")
+        .accessibilityValue(fault)
+        .help(fault)
+        .onAppear { AccessibilityAnnouncer.announce(fault) }
     }
 
     // MARK: Panes
@@ -174,6 +237,8 @@ struct OverlayView: View {
                         .id(shown)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
+                        .frame(maxWidth: 680)
+                        .frame(maxWidth: .infinity)
                 }
                 .scrollContentBackground(.hidden)
 
@@ -264,6 +329,7 @@ struct OverlayView: View {
                 .id(id)
                 .padding(.horizontal, 10)
                 .padding(.bottom, 8)
+                .frame(maxWidth: .infinity)
         } else {
             VStack(spacing: 10) {
                 hint("Здесь можно спросить что угодно текстом", icon: "bubble.left.and.bubble.right")
@@ -292,6 +358,8 @@ struct OverlayView: View {
             )
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -326,6 +394,7 @@ struct OverlayView: View {
 private struct PaneTabs: View {
     @Binding var selection: OverlayPane
     let badged: OverlayPane?
+    let compact: Bool
 
     var body: some View {
         HStack(spacing: 2) {
@@ -334,16 +403,22 @@ private struct PaneTabs: View {
                     selection = pane
                 } label: {
                     HStack(spacing: 4) {
-                        Text(pane.russianLabel)
-                            .font(.caption.weight(selection == pane ? .semibold : .regular))
-                            .lineLimit(1)
+                        if compact {
+                            Image(systemName: pane.systemImage)
+                                .font(.system(size: 12, weight: selection == pane ? .semibold : .regular))
+                        } else {
+                            Text(pane.russianLabel)
+                                .font(.caption.weight(selection == pane ? .semibold : .regular))
+                                .lineLimit(1)
+                        }
                         if badged == pane {
                             Circle()
                                 .fill(Theme.tint)
                                 .frame(width: 5, height: 5)
                         }
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, compact ? 7 : 8)
+                    .frame(minWidth: compact ? 28 : 0)
                     .frame(height: 24)
                     .background(
                         selection == pane
@@ -400,45 +475,31 @@ private struct StatusLight: View {
             )
             .padding(.horizontal, 2)
             .help(state.label)
+            .accessibilityElement()
             .accessibilityLabel(state.label)
     }
 }
 
-/// Opacity slider that unfolds on hover. A permanent slider would take a third
-/// of the bar; the value is still readable and adjustable without hovering.
+/// Stable-width opacity menu. It remains keyboard/VoiceOver accessible and does
+/// not make the title bar reflow when the pointer crosses it.
 private struct OpacityControl: View {
     @Binding var opacity: Double
-    @State private var expanded = false
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "circle.lefthalf.filled")
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 26, height: 26)
-                .foregroundStyle(.secondary)
-            if expanded {
-                Slider(value: $opacity, in: AppSettings.overlayOpacityRange)
-                    .controlSize(.mini)
-                    .frame(width: 64)
-                Text("\(Int(opacity * 100))%")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .frame(width: 28, alignment: .trailing)
+        Menu {
+            Picker("Прозрачность фона", selection: $opacity) {
+                Text("70%").tag(0.70)
+                Text("85%").tag(0.85)
+                Text("100%").tag(1.0)
             }
+        } label: {
+            Label("Прозрачность фона", systemImage: "circle.lefthalf.filled")
         }
-        .contentShape(Rectangle())
-        .onHover { expanded = $0 }
+        .labelStyle(.iconOnly)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
         .help("Прозрачность фона: \(Int(opacity * 100))%")
         .accessibilityLabel("Прозрачность фона")
         .accessibilityValue("\(Int(opacity * 100)) процентов")
-        .accessibilityAdjustableAction { direction in
-            let range = AppSettings.overlayOpacityRange
-            switch direction {
-            case .increment: opacity = min(range.upperBound, opacity + 0.05)
-            case .decrement: opacity = max(range.lowerBound, opacity - 0.05)
-            @unknown default: break
-            }
-        }
     }
 }

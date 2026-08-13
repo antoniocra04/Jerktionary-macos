@@ -44,6 +44,7 @@ final class ExplanationManager: ObservableObject {
                 }
             } catch {
                 self.errors[normalized] = error.localizedDescription
+                AccessibilityAnnouncer.announce(error.localizedDescription)
             }
             self.streaming[normalized] = nil
             self.activeStreams.remove(normalized)

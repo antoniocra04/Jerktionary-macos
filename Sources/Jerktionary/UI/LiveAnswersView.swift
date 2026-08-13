@@ -58,6 +58,7 @@ struct LiveAnswersView: View {
             }
             .disabled(index >= total - 1)
             .help("Более старый вопрос")
+            .accessibilityLabel("Более старый вопрос")
             Button {
                 move(-1)
             } label: {
@@ -65,6 +66,7 @@ struct LiveAnswersView: View {
             }
             .disabled(index <= 0)
             .help("Более новый вопрос")
+            .accessibilityLabel("Более новый вопрос")
         }
         .buttonStyle(.borderless)
         .font(.caption)
@@ -239,26 +241,9 @@ struct AnswerCardView: View {
                         )
                 }
 
-                HStack(spacing: 16) {
-                    Button(deep ? "Короче" : "Подробнее") {
-                        deep.toggle()
-                        if deep {
-                            answers.ensureStream(question: question, deep: true, context: store.currentText)
-                        }
-                    }
-                    Button {
-                        copy(answer)
-                    } label: {
-                        Label(copied ? "Скопировано" : "Копировать",
-                              systemImage: copied ? "checkmark" : "doc.on.doc")
-                    }
-                    if !state.streaming {
-                        Button {
-                            answers.regenerate(question: question, deep: deep, context: store.currentText)
-                        } label: {
-                            Label("Перегенерировать", systemImage: "arrow.counterclockwise")
-                        }
-                    }
+                ViewThatFits(in: .horizontal) {
+                    fullAnswerActions(answer: answer, streaming: state.streaming)
+                    compactAnswerActions(answer: answer, streaming: state.streaming)
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
@@ -288,8 +273,62 @@ struct AnswerCardView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = true
+        AccessibilityAnnouncer.announce("Ответ скопирован")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             copied = false
+        }
+    }
+
+    private func fullAnswerActions(answer: LiveAnswer, streaming: Bool) -> some View {
+        HStack(spacing: 16) {
+            depthButton
+            copyButton(answer)
+            if !streaming {
+                regenerateButton
+            }
+        }
+    }
+
+    private func compactAnswerActions(answer: LiveAnswer, streaming: Bool) -> some View {
+        HStack(spacing: 10) {
+            depthButton
+            Spacer(minLength: 0)
+            Menu {
+                copyButton(answer)
+                if !streaming {
+                    regenerateButton
+                }
+            } label: {
+                Label("Действия с ответом", systemImage: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
+    private var depthButton: some View {
+        Button(deep ? "Короче" : "Подробнее") {
+            deep.toggle()
+            if deep {
+                answers.ensureStream(question: question, deep: true, context: store.currentText)
+            }
+        }
+    }
+
+    private func copyButton(_ answer: LiveAnswer) -> some View {
+        Button {
+            copy(answer)
+        } label: {
+            Label(copied ? "Скопировано" : "Копировать",
+                  systemImage: copied ? "checkmark" : "doc.on.doc")
+        }
+    }
+
+    private var regenerateButton: some View {
+        Button {
+            answers.regenerate(question: question, deep: deep, context: store.currentText)
+        } label: {
+            Label("Перегенерировать", systemImage: "arrow.counterclockwise")
         }
     }
 }

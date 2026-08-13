@@ -50,6 +50,8 @@ struct NoteTextEditor: NSViewRepresentable {
         textView.allowsUndo = true
         textView.drawsBackground = false
         textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        textView.setAccessibilityLabel("Текст заметки")
+        textView.setAccessibilityHelp("Редактор Markdown")
         textView.textContainerInset = NSSize(width: 0, height: 2)
         textView.textContainer?.widthTracksTextView = true
         // Lets TextKit lay out only what's on screen instead of the whole note.

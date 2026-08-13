@@ -2,36 +2,12 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Meeting detail as an in-window modal: dimmed backdrop, click outside (or
-/// Esc) closes — sheets can't do that natively on macOS.
-struct MeetingModal: View {
-    @EnvironmentObject private var store: AppStore
-    let meeting: MeetingRecord
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.25)
-                .ignoresSafeArea()
-                .onTapGesture { store.selectedMeeting = nil }
-
-            MeetingDetailView(meeting: meeting, onClose: { store.selectedMeeting = nil })
-                .frame(maxWidth: 640, maxHeight: 560)
-                .background(
-                    Theme.canvas,
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                )
-                .shadow(color: .black.opacity(0.25), radius: 28, y: 8)
-                .padding(32)
-                .onExitCommand { store.selectedMeeting = nil }
-        }
-    }
-}
-
 struct MeetingDetailView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     let meeting: MeetingRecord
     var onClose: (() -> Void)?
+    @State private var confirmingDelete = false
 
     var body: some View {
         ScrollView {
@@ -44,8 +20,7 @@ struct MeetingDetailView: View {
                         exportMarkdown()
                     }
                     CircleToolbarButton(systemImage: "trash", help: "Удалить встречу") {
-                        store.meetings.delete(meeting.id)
-                        (onClose ?? { dismiss() })()
+                        confirmingDelete = true
                     }
                     CircleToolbarButton(systemImage: "xmark", help: "Закрыть") {
                         (onClose ?? { dismiss() })()
@@ -96,6 +71,15 @@ struct MeetingDetailView: View {
             .padding(20)
         }
         .scrollContentBackground(.hidden)
+        .alert("Удалить встречу?", isPresented: $confirmingDelete) {
+            Button("Удалить", role: .destructive) {
+                store.meetings.delete(meeting.id)
+                (onClose ?? { dismiss() })()
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Транскрипт и ответы этой встречи нельзя будет восстановить.")
+        }
     }
 
     private func exportMarkdown() {

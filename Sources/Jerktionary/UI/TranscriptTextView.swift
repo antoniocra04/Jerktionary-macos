@@ -18,9 +18,6 @@ struct TranscriptTextView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var onTermTap: (TranscriptTerm) -> Void
-        /// What is currently in the text storage, so the next update can diff
-        /// against it without reading it back out of TextKit.
-        var applied = NSAttributedString()
         var termsByID: [String: TranscriptTerm] = [:]
         /// The inputs `applied` was built from. `updateNSView` runs on every
         /// AppStore publish — typing in the meeting-context field, an answer
@@ -53,6 +50,8 @@ struct TranscriptTextView: NSViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
+        textView.setAccessibilityLabel("Транскрипт")
+        textView.setAccessibilityHelp("Термины подчёркнуты и открывают объяснение")
         textView.textContainerInset = .zero
         textView.textContainer?.widthTracksTextView = true
         textView.layoutManager?.allowsNonContiguousLayout = true
@@ -69,22 +68,32 @@ struct TranscriptTextView: NSViewRepresentable {
 
     private func apply(to textView: NSTextView, coordinator: Coordinator) {
         guard coordinator.sourceText != text || coordinator.sourceTerms != terms else { return }
-        coordinator.sourceText = text
-        coordinator.sourceTerms = terms
+        let previousText = coordinator.sourceText ?? ""
+        let previousTerms = coordinator.sourceTerms
+        let commonCharacters = TranscriptDocument.commonPrefixCharacterCount(previousText, text)
+        let changedTermStart = TranscriptDocument.earliestChangedTermStart(previousTerms, terms)
+        let initialRebuildCharacter = min(commonCharacters, changedTermStart ?? commonCharacters)
+        let overlappingTermStart = (previousTerms + terms)
+            .filter { $0.start < initialRebuildCharacter && $0.end > initialRebuildCharacter }
+            .map(\.start)
+            .min()
+        let rebuildCharacter = min(initialRebuildCharacter, overlappingTermStart ?? initialRebuildCharacter)
+        let oldUTF16 = TranscriptDocument.utf16Offset(
+            forCharacterOffset: rebuildCharacter,
+            in: previousText
+        )
+        let newIndex = text.index(text.startIndex, offsetBy: rebuildCharacter)
+        let tailText = String(text[newIndex...])
+        let tail = TranscriptDocument.build(
+            text: tailText,
+            terms: terms,
+            characterOffset: rebuildCharacter
+        )
 
-        let document = TranscriptDocument.build(text: text, terms: terms)
-        let previous = coordinator.applied
-        // No equality check against `previous` here: it would be another full
-        // pass over the document, and if the two do match the diff below simply
-        // resolves to an empty replacement.
         coordinator.termsByID = Dictionary(terms.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         guard let storage = textView.textStorage else { return }
-        let unchanged = TranscriptDocument.unchangedPrefixLength(previous, document)
-        let replaced = NSRange(location: unchanged, length: previous.length - unchanged)
-        let tail = document.attributedSubstring(
-            from: NSRange(location: unchanged, length: document.length - unchanged)
-        )
+        let replaced = NSRange(location: oldUTF16, length: storage.length - oldUTF16)
 
         // Selections that survive the edit are worth keeping — the user may be
         // copying from earlier in the transcript while speech continues.
@@ -92,10 +101,11 @@ struct TranscriptTextView: NSViewRepresentable {
         storage.beginEditing()
         storage.replaceCharacters(in: replaced, with: tail)
         storage.endEditing()
-        if selection.upperBound <= unchanged {
+        if selection.upperBound <= oldUTF16 {
             textView.setSelectedRange(selection)
         }
-        coordinator.applied = document
+        coordinator.sourceText = text
+        coordinator.sourceTerms = terms
     }
 }
 
@@ -104,13 +114,32 @@ struct TranscriptTextView: NSViewRepresentable {
 enum TranscriptDocument {
     static let linkScheme = "jerktionary-term"
 
-    static func build(text: String, terms: [TranscriptTerm]) -> NSAttributedString {
+    static func build(
+        text: String,
+        terms: [TranscriptTerm],
+        characterOffset: Int = 0
+    ) -> NSAttributedString {
         let base: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
             .foregroundColor: NSColor.labelColor,
             .paragraphStyle: paragraphStyle
         ]
-        let segments = TermMerger.highlightSegments(text: text, terms: terms)
+        let upperBound = characterOffset + text.count
+        var originalsByAdjustedID: [String: TranscriptTerm] = [:]
+        let adjustedTerms = terms.compactMap { term -> TranscriptTerm? in
+            guard term.start >= characterOffset, term.end <= upperBound else { return nil }
+            let adjusted = TranscriptTerm(
+                text: term.text,
+                normalized: term.normalized,
+                start: term.start - characterOffset,
+                end: term.end - characterOffset,
+                type: term.type,
+                confidence: term.confidence
+            )
+            originalsByAdjustedID[adjusted.id] = term
+            return adjusted
+        }
+        let segments = TermMerger.highlightSegments(text: text, terms: adjustedTerms)
         // NSMutableAttributedString appends in amortised constant time; building
         // this by `AttributedString +=` was quadratic in the segment count and
         // cost 38 ms at 100k characters on its own.
@@ -119,11 +148,12 @@ enum TranscriptDocument {
             switch segment {
             case .text(let value, _):
                 document.append(NSAttributedString(string: value, attributes: base))
-            case .term(let value, let term):
+            case .term(let value, let adjustedTerm):
                 var attributes = base
                 attributes[.foregroundColor] = NSColor.controlAccentColor
                 attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-                if let url = linkURL(for: term) {
+                let originalTerm = originalsByAdjustedID[adjustedTerm.id] ?? adjustedTerm
+                if let url = linkURL(for: originalTerm) {
                     attributes[.link] = url
                 }
                 document.append(NSAttributedString(string: value, attributes: attributes))
@@ -132,49 +162,40 @@ enum TranscriptDocument {
         return document
     }
 
+    static func commonPrefixCharacterCount(_ old: String, _ new: String) -> Int {
+        var oldIndex = old.startIndex
+        var newIndex = new.startIndex
+        var count = 0
+        while oldIndex < old.endIndex, newIndex < new.endIndex,
+              old[oldIndex] == new[newIndex] {
+            count += 1
+            old.formIndex(after: &oldIndex)
+            new.formIndex(after: &newIndex)
+        }
+        return count
+    }
+
+    static func utf16Offset(forCharacterOffset offset: Int, in text: String) -> Int {
+        guard offset > 0 else { return 0 }
+        let index = text.index(text.startIndex, offsetBy: min(offset, text.count))
+        return text[..<index].utf16.count
+    }
+
+    static func earliestChangedTermStart(
+        _ old: [TranscriptTerm],
+        _ new: [TranscriptTerm]
+    ) -> Int? {
+        let oldByID = Dictionary(old.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let newByID = Dictionary(new.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return Set(oldByID.keys).union(newByID.keys).compactMap { key in
+            guard oldByID[key] != newByID[key] else { return nil }
+            return min(oldByID[key]?.start ?? .max, newByID[key]?.start ?? .max)
+        }.min()
+    }
+
     static func linkURL(for term: TranscriptTerm) -> URL? {
         let encoded = term.id.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) ?? ""
         return URL(string: "\(linkScheme)://\(encoded)")
-    }
-
-    /// Length, in UTF-16 units, of the leading stretch the two documents share —
-    /// same characters and same attributes. Everything from here on is replaced.
-    static func unchangedPrefixLength(_ old: NSAttributedString, _ new: NSAttributedString) -> Int {
-        let limit = min(old.length, new.length)
-        guard limit > 0 else { return 0 }
-
-        // Text first: attribute runs are only walked as far as the characters
-        // actually match. Copied into buffers rather than compared through
-        // `character(at:)`, which is an Objective-C call per character.
-        var oldBuffer = [unichar](repeating: 0, count: limit)
-        var newBuffer = [unichar](repeating: 0, count: limit)
-        (old.string as NSString).getCharacters(&oldBuffer, range: NSRange(location: 0, length: limit))
-        (new.string as NSString).getCharacters(&newBuffer, range: NSRange(location: 0, length: limit))
-        var textPrefix = 0
-        while textPrefix < limit, oldBuffer[textPrefix] == newBuffer[textPrefix] {
-            textPrefix += 1
-        }
-
-        // Run boundaries are compared by attributes, not by extent: appending to
-        // the transcript extends the final run rather than starting a new one,
-        // and requiring equal run lengths would discard the whole tail since the
-        // last term on every single update.
-        // `build` sets tint, underline and link together on exactly the term
-        // runs, so the link alone identifies a run — and reading one attribute
-        // avoids bridging a whole dictionary per run, of which there are one
-        // per term.
-        var location = 0
-        while location < textPrefix {
-            var oldRange = NSRange(location: 0, length: 0)
-            var newRange = NSRange(location: 0, length: 0)
-            let oldLink = old.attribute(.link, at: location, effectiveRange: &oldRange) as? URL
-            let newLink = new.attribute(.link, at: location, effectiveRange: &newRange) as? URL
-            guard oldLink == newLink else { break }
-            let next = min(oldRange.upperBound, newRange.upperBound, textPrefix)
-            guard next > location else { break }
-            location = next
-        }
-        return location
     }
 
     private static let paragraphStyle: NSParagraphStyle = {

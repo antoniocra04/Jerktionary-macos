@@ -103,6 +103,8 @@ struct ChatComposerTextView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.drawsBackground = false
         textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.setAccessibilityLabel("Сообщение")
+        textView.setAccessibilityHelp("Enter — отправить, Shift+Enter — перенос строки")
         textView.textContainerInset = NSSize(width: 2, height: 6)
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]

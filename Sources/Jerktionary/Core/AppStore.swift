@@ -137,13 +137,13 @@ final class AppStore: ObservableObject {
         wsClient?.disconnect()
         let client = TranscriptWSClient(url: url)
         client.onEvent = { [weak self] event in
-            Task { @MainActor in self?.handleWsEvent(event) }
+            Task { @MainActor [weak self] in self?.handleWsEvent(event) }
         }
         client.onStatus = { [weak self] status in
-            Task { @MainActor in self?.connectionStatus = status }
+            Task { @MainActor [weak self] in self?.connectionStatus = status }
         }
         client.onError = { [weak self] message in
-            Task { @MainActor in self?.websocketError = message }
+            Task { @MainActor [weak self] in self?.websocketError = message }
         }
         wsClient = client
         client.connect()
@@ -155,10 +155,10 @@ final class AppStore: ObservableObject {
         try await capture.start(
             deviceUID: settings.audioInputDeviceUID,
             onChunk: { [weak self] data in
-                Task { @MainActor in self?.wsClient?.sendAudioChunk(data) }
+                Task { @MainActor [weak self] in self?.wsClient?.sendAudioChunk(data) }
             },
             onLevel: { [weak self] level in
-                Task { @MainActor in self?.audioLevel.level = level }
+                Task { @MainActor [weak self] in self?.audioLevel.level = level }
             }
         )
     }
@@ -168,13 +168,13 @@ final class AppStore: ObservableObject {
         systemCapture = capture
         try await capture.start(
             onChunk: { [weak self] data in
-                Task { @MainActor in self?.wsClient?.sendAudioChunk(data) }
+                Task { @MainActor [weak self] in self?.wsClient?.sendAudioChunk(data) }
             },
             onLevel: { [weak self] level in
-                Task { @MainActor in self?.audioLevel.level = level }
+                Task { @MainActor [weak self] in self?.audioLevel.level = level }
             },
             onStopError: { [weak self] message in
-                Task { @MainActor in self?.microphoneError = message }
+                Task { @MainActor [weak self] in self?.microphoneError = message }
             }
         )
     }

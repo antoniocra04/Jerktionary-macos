@@ -29,12 +29,35 @@ enum OverlayPane: String, CaseIterable, Identifiable {
         case .transcript: "Транскрипт"
         }
     }
+
+    var systemImage: String {
+        switch self {
+        case .answer: "sparkles"
+        case .chat: "bubble.left.and.bubble.right"
+        case .transcript: "waveform"
+        }
+    }
 }
 
 enum AppTheme: String, CaseIterable, Identifiable {
-    case light, dark
+    case system, light, dark
     var id: String { rawValue }
-    var colorScheme: ColorScheme { self == .dark ? .dark : .light }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    var russianLabel: String {
+        switch self {
+        case .system: "Как в macOS"
+        case .light: "Светлая"
+        case .dark: "Тёмная"
+        }
+    }
 }
 
 /// Persistent user settings, the SwiftUI counterpart of the web settings store.
@@ -50,13 +73,13 @@ final class AppSettings: ObservableObject {
     @AppStorage("settings.audioSource") private var audioSourceRaw = AudioSource.microphone.rawValue
     /// CoreAudio device UID of the preferred microphone; empty = system default.
     @AppStorage("settings.audioInputDeviceUID") var audioInputDeviceUID = ""
-    @AppStorage("settings.theme") private var themeRaw = AppTheme.light.rawValue
+    @AppStorage("settings.theme") private var themeRaw = AppTheme.system.rawValue
     @AppStorage("settings.hasCompletedSetup") var hasCompletedSetup = false
     /// Background transparency of the compact overlay card. It shades the
     /// material only — never the text, which the old whole-panel alpha took to
     /// roughly 1.5:1 at the bottom of its range. The floor keeps the card
     /// findable on a busy desktop.
-    static let overlayOpacityRange = 0.35...1.0
+    static let overlayOpacityRange = 0.70...1.0
     @AppStorage("settings.overlayOpacity") var overlayOpacity = 0.85
     /// Which pane the compact overlay shows.
     @AppStorage("settings.overlayPane") private var overlayPaneRaw = OverlayPane.answer.rawValue
@@ -77,6 +100,15 @@ final class AppSettings: ObservableObject {
     /// leaves the shot in the composer so a question can be typed instead —
     /// sending an image with no question usually wastes the request.
     @AppStorage("settings.chatScreenshotPrompt") var chatScreenshotPrompt = ""
+
+    init() {
+        // Earlier releases allowed values that made foreground contrast depend
+        // too heavily on whatever happened to be behind the floating panel.
+        overlayOpacity = min(
+            Self.overlayOpacityRange.upperBound,
+            max(Self.overlayOpacityRange.lowerBound, overlayOpacity)
+        )
+    }
 
     var chatModels: [String] {
         chatModelsRaw

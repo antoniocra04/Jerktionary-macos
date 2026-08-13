@@ -74,6 +74,7 @@ final class AnswerStreamManager: ObservableObject {
                 }
             } catch {
                 self.inflight[key]?.error = error.localizedDescription
+                AccessibilityAnnouncer.announce(error.localizedDescription)
             }
             self.inflight[key]?.done = true
             self.tasks[key] = nil

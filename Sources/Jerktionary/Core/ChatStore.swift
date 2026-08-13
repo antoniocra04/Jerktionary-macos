@@ -3,22 +3,19 @@ import Foundation
 
 /// An image attached to a chat message, kept as a base64 data: URI — the shape
 /// the backend takes and the shape that survives JSON persistence unchanged.
-struct ChatAttachment: Codable, Identifiable, Hashable {
+struct ChatAttachment: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var dataURL: String
     /// Original file name when the image came from disk, for the UI only.
     var name: String
 
     var image: NSImage? {
-        guard let comma = dataURL.firstIndex(of: ","),
-              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...]))
-        else { return nil }
-        return NSImage(data: data)
+        ChatImageCache.shared.thumbnail(for: self)
     }
 }
 
-struct ChatMessage: Codable, Identifiable, Hashable {
-    enum Role: String, Codable {
+struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
+    enum Role: String, Codable, Sendable {
         case user
         case assistant
     }
@@ -47,7 +44,7 @@ struct ChatMessage: Codable, Identifiable, Hashable {
     }
 }
 
-struct Conversation: Codable, Identifiable, Hashable {
+struct Conversation: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var title: String
     var messages: [ChatMessage]
@@ -145,6 +142,10 @@ final class ChatStore: ObservableObject {
     private var persistTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
     private var publishTask: Task<Void, Never>?
+    private var loadRequested = false
+    private var loadFinished = false
+    private var mutatedDuringLoad = false
+    private var deletedDuringLoad: Set<String> = []
 
     private var storeURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -157,14 +158,48 @@ final class ChatStore: ObservableObject {
     }
 
     func load() {
-        guard let data = try? Data(contentsOf: storeURL),
-              let parsed = try? JSONDecoder().decode([Conversation].self, from: data)
-        else {
-            conversations = []
-            return
+        guard !loadRequested else { return }
+        loadRequested = true
+        let url = storeURL
+        ioQueue.async { [weak self] in
+            let parsed: [Conversation]
+            if let data = try? Data(contentsOf: url),
+               let decoded = try? JSONDecoder().decode([Conversation].self, from: data) {
+                parsed = decoded
+            } else {
+                parsed = []
+            }
+            DispatchQueue.main.async {
+                self?.finishLoading(parsed)
+            }
         }
-        conversations = parsed.sorted { $0.updatedAt > $1.updatedAt }
-        selectedID = conversations.first?.id
+    }
+
+    private func finishLoading(_ persisted: [Conversation]) {
+        var merged = persisted.filter { !deletedDuringLoad.contains($0.id) }
+        for current in conversations {
+            if let index = merged.firstIndex(where: { $0.id == current.id }) {
+                merged[index] = current
+            } else {
+                merged.append(current)
+            }
+        }
+        conversations = merged.sorted { $0.updatedAt > $1.updatedAt }
+        if selectedID == nil || conversation(id: selectedID ?? "") == nil {
+            selectedID = conversations.first?.id
+        }
+        loadFinished = true
+        if mutatedDuringLoad {
+            persistNow()
+        }
+        mutatedDuringLoad = false
+        deletedDuringLoad = []
+    }
+
+    private func markMutation(deleting id: String? = nil) {
+        guard !loadFinished else { return }
+        mutatedDuringLoad = true
+        if let id { deletedDuringLoad.insert(id) }
     }
 
     func conversation(id: String) -> Conversation? {
@@ -173,6 +208,7 @@ final class ChatStore: ObservableObject {
 
     @discardableResult
     func create() -> Conversation {
+        markMutation()
         let conversation = Conversation.new()
         conversations.insert(conversation, at: 0)
         selectedID = conversation.id
@@ -194,6 +230,7 @@ final class ChatStore: ObservableObject {
     }
 
     func delete(_ id: String) {
+        markMutation(deleting: id)
         if streamingConversationID == id {
             cancelStreaming()
         }
@@ -208,6 +245,7 @@ final class ChatStore: ObservableObject {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         if let model { conversations[index].model = model }
         if let reasoningEffort { conversations[index].reasoningEffort = reasoningEffort }
+        markMutation()
         schedulePersist()
     }
 
@@ -359,6 +397,9 @@ final class ChatStore: ObservableObject {
             message.error = failure
             conversations[index].messages.append(message)
         }
+        if let failure {
+            AccessibilityAnnouncer.announce(failure)
+        }
         touch(conversationID)
         streamTick &+= 1
     }
@@ -376,6 +417,7 @@ final class ChatStore: ObservableObject {
 
     private func touch(_ id: String) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        markMutation()
         conversations[index].updatedAt = Date.now.timeIntervalSince1970 * 1000
         conversations.sort { $0.updatedAt > $1.updatedAt }
         schedulePersist()
@@ -418,6 +460,10 @@ final class ChatStore: ObservableObject {
     }
 
     private func persistNow() {
+        guard loadFinished else {
+            mutatedDuringLoad = true
+            return
+        }
         persistTask?.cancel()
         persistTask = nil
         let snapshot = conversations

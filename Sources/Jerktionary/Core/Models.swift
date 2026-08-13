@@ -129,14 +129,14 @@ struct BackendComponent: Identifiable {
 
 // MARK: - Meetings (JSON-compatible with the Electron app's meetings.json)
 
-struct MeetingQA: Codable, Hashable {
+struct MeetingQA: Codable, Hashable, Sendable {
     var question: String
     var answer: String
     var points: [String]
     var example: String
 }
 
-struct MeetingRecord: Codable, Identifiable, Hashable {
+struct MeetingRecord: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var startedAt: Double
     var endedAt: Double

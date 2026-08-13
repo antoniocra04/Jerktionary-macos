@@ -16,12 +16,16 @@ struct RootView: View {
         }
         .tint(Theme.tint)
         .background(Theme.canvas)
+        .toolbar {
+            if settings.hasCompletedSetup {
+                MainToolbar()
+            }
+        }
     }
 }
 
-/// Journal-style shell: translucent sidebar on the LEFT (under the traffic
-/// lights), content area on the right with a left-aligned large title and
-/// round toolbar buttons, over a faint lavender wash.
+/// Journal-style shell: translucent sidebar on the left and a focused content
+/// area under the native macOS toolbar, over a faint lavender wash.
 struct MainView: View {
     @EnvironmentObject private var store: AppStore
 
@@ -45,22 +49,28 @@ struct MainView: View {
                 contentArea
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .animation(.easeOut(duration: 0.2), value: store.sidebarVisible)
-
-            if let meeting = store.selectedMeeting {
-                MeetingModal(meeting: meeting)
-                    .transition(.opacity)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: store.sidebarVisible)
+        }
+        .background(Theme.canvas)
+        .sheet(item: $store.selectedMeeting) { meeting in
+            MeetingDetailView(meeting: meeting)
+                .frame(minWidth: 560, minHeight: 420)
+        }
+        .onChange(of: store.mainTab) {
+            // An AppKit text view can remain first responder after its SwiftUI tab
+            // is hidden. Clearing it prevents keyboard input from going offscreen.
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
+        .onChange(of: store.sessionAnswers.count) { previous, current in
+            if current > previous {
+                AccessibilityAnnouncer.announce("Ответ готов")
             }
         }
-        .animation(.easeOut(duration: 0.15), value: store.selectedMeeting != nil)
-        .background(Theme.canvas)
     }
 
     @ViewBuilder
     private var contentArea: some View {
         VStack(alignment: .leading, spacing: 0) {
-            MainTopBar()
-
             // Both areas stay mounted; switching only toggles visibility, so the
             // open note and scroll positions survive a round-trip to the session.
             // The listening pipeline runs in the store regardless of the tab.
@@ -68,14 +78,20 @@ struct MainView: View {
                 sessionArea
                     .opacity(store.mainTab == .session ? 1 : 0)
                     .allowsHitTesting(store.mainTab == .session)
+                    .disabled(store.mainTab != .session)
+                    .accessibilityHidden(store.mainTab != .session)
 
                 NotesView()
                     .opacity(store.mainTab == .notes ? 1 : 0)
                     .allowsHitTesting(store.mainTab == .notes)
+                    .disabled(store.mainTab != .notes)
+                    .accessibilityHidden(store.mainTab != .notes)
 
                 ChatView()
                     .opacity(store.mainTab == .chat ? 1 : 0)
                     .allowsHitTesting(store.mainTab == .chat)
+                    .disabled(store.mainTab != .chat)
+                    .accessibilityHidden(store.mainTab != .chat)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -121,26 +137,26 @@ struct MainView: View {
     }
 }
 
-/// Large left-aligned title + round action buttons, like Journal's top row.
-struct MainTopBar: View {
+/// Native toolbar: macOS owns compression and overflow, while every action also
+/// appears in the menu bar through JerktionaryApp's Commands.
+struct MainToolbar: ToolbarContent {
     @EnvironmentObject private var store: AppStore
-    @EnvironmentObject private var settings: AppSettings
-    @State private var showSettings = false
 
-    var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            CircleToolbarButton(
-                systemImage: "sidebar.left",
-                help: store.sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель"
-            ) {
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button {
                 store.sidebarVisible.toggle()
+            } label: {
+                Label(
+                    store.sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель",
+                    systemImage: "sidebar.left"
+                )
             }
-            .padding(.trailing, 4)
+            .help(store.sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель")
+        }
 
-            Text(settings.displayName)
-                .font(.system(size: 26, weight: .bold))
-
-            Picker("", selection: $store.mainTab) {
+        ToolbarItem(placement: .principal) {
+            Picker("Раздел", selection: $store.mainTab) {
                 Text("Сессия").tag(MainTab.session)
                 Text("Заметки").tag(MainTab.notes)
                 Text("Чат").tag(MainTab.chat)
@@ -148,60 +164,38 @@ struct MainTopBar: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            .padding(.leading, 12)
+        }
 
-            Spacer()
-
+        ToolbarItemGroup(placement: .primaryAction) {
             if store.isListening {
                 LevelMeterView(model: store.audioLevel)
-                    .padding(.trailing, 6)
             }
 
-            CircleToolbarButton(
-                systemImage: "rectangle.bottomthird.inset.filled",
-                help: "Компактный режим поверх всех окон (Ctrl+Shift+O)"
-            ) {
+            Button {
                 store.toggleOverlay()
+            } label: {
+                Label(
+                    "Компактный режим поверх всех окон",
+                    systemImage: "rectangle.bottomthird.inset.filled"
+                )
             }
+            .help("Компактный режим поверх всех окон (Ctrl+Shift+O)")
 
-            CircleToolbarButton(
-                systemImage: "gearshape",
-                help: "Настройки"
-            ) {
-                showSettings = true
-            }
-            .popover(isPresented: $showSettings) {
-                SettingsView()
-            }
-
-            CircleToolbarButton(
-                systemImage: settings.theme == .dark ? "sun.max" : "moon",
-                help: settings.theme == .dark ? "Светлая тема" : "Тёмная тема"
-            ) {
-                settings.theme = settings.theme == .dark ? .light : .dark
-            }
-
-            CircleToolbarButton(
-                systemImage: store.contentProtectionEnabled ? "eye.slash" : "eye",
-                active: store.contentProtectionEnabled,
-                help: store.contentProtectionEnabled ? "Скрыто от захвата экрана" : "Видно при захвате экрана"
-            ) {
+            Button {
                 store.contentProtectionEnabled.toggle()
                 WindowController.setContentProtection(store.contentProtectionEnabled)
+            } label: {
+                Label(
+                    store.contentProtectionEnabled
+                        ? "Скрыто от захвата экрана"
+                        : "Видно при захвате экрана",
+                    systemImage: store.contentProtectionEnabled ? "eye.slash" : "eye"
+                )
             }
+            .help(store.contentProtectionEnabled ? "Скрыто от захвата экрана" : "Видно при захвате экрана")
 
             ListenButton()
-                .padding(.leading, 6)
         }
-        .padding(.horizontal, 28)
-        // Constant padding in both states: the row never jumps, it only slides
-        // horizontally together with the content when the sidebar collapses.
-        // 36 keeps it clear of the traffic lights when the sidebar is hidden.
-        .padding(.top, 36)
-        .padding(.bottom, 16)
-        // Move the whole row as one unit during the sidebar slide; without
-        // this the button and the title animate out of sync and overlap.
-        .geometryGroup()
     }
 }
 
@@ -242,6 +236,9 @@ struct ErrorBanner: View {
             .red.opacity(0.09),
             in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
         )
+        .accessibilityElement(children: .combine)
+        .onAppear { AccessibilityAnnouncer.announce(message) }
+        .onChange(of: message) { AccessibilityAnnouncer.announce(message) }
     }
 }
 

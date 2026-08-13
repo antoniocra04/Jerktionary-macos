@@ -10,14 +10,16 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var conversations: [Conversation] { chatStore.conversations }
     private var selectedID: String? { chatStore.selectedID }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
+        HSplitView {
             conversationList
-                .frame(width: 260)
+                .frame(minWidth: 200, idealWidth: 240, maxWidth: 320)
+                .padding(.trailing, 8)
 
             Group {
                 if let selectedID, chatStore.conversation(id: selectedID) != nil {
@@ -27,10 +29,11 @@ struct ChatView: View {
                     emptyState
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.leading, 8)
         }
         .padding(.horizontal, 28)
-        .padding(.top, 4)
+        .padding(.top, 16)
         .padding(.bottom, 28)
         .task {
             await chatStore.refreshCapabilities(client: store.backendClient)
@@ -56,6 +59,7 @@ struct ChatView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.tint)
                 .help("Новый чат")
+                .accessibilityLabel("Новый чат")
             }
 
             if conversations.isEmpty {
@@ -79,7 +83,7 @@ struct ChatView: View {
                         }
                     }
                     .animation(
-                        .spring(response: 0.35, dampingFraction: 0.8),
+                        reduceMotion ? nil : .easeOut(duration: 0.2),
                         value: conversations.map(\.id)
                     )
                 }
@@ -112,6 +116,7 @@ private struct ConversationRow: View {
     let open: () -> Void
     let onDelete: () -> Void
     @State private var hovering = false
+    @State private var confirmingDelete = false
 
     var body: some View {
         Button(action: open) {
@@ -135,7 +140,15 @@ private struct ConversationRow: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .contextMenu {
+            Button("Удалить", role: .destructive) {
+                confirmingDelete = true
+            }
+        }
+        .alert("Удалить чат?", isPresented: $confirmingDelete) {
             Button("Удалить", role: .destructive, action: onDelete)
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Историю этого чата нельзя будет восстановить.")
         }
     }
 }
@@ -184,6 +197,7 @@ struct ChatThreadView: View {
             in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
         )
         .shadow(color: compact ? .clear : Theme.shadowColor, radius: 6, y: 1)
+        .frame(maxWidth: compact ? 680 : .infinity)
         .onChange(of: chatStore.pendingAttachments) {
             // Handed over by the screenshot hotkey, which has no access to the
             // draft; taking them here keeps one owner for the composer state.
@@ -195,6 +209,11 @@ struct ChatThreadView: View {
             if let message = chatStore.transientError {
                 attachmentError = message
                 chatStore.transientError = nil
+            }
+        }
+        .onChange(of: attachmentError) {
+            if let attachmentError {
+                AccessibilityAnnouncer.announce(attachmentError)
             }
         }
         .task(id: conversation?.model ?? "") {
@@ -215,52 +234,103 @@ struct ChatThreadView: View {
     // MARK: Header — model and reasoning
 
     private var header: some View {
+        ViewThatFits(in: .horizontal) {
+            fullHeader
+            compactHeader
+        }
+    }
+
+    private var fullHeader: some View {
         HStack(spacing: 10) {
-            Picker("", selection: modelBinding) {
-                Text(defaultModelLabel).tag("")
-                ForEach(offeredModels, id: \.self) { model in
-                    Text(model).tag(model)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: compact ? 190 : 260)
-            .controlSize(compact ? .small : .regular)
-            .help("Модель. Список задаётся в настройках.")
+            modelPicker(maxWidth: compact ? 190 : 260)
 
             if !chatStore.capabilities.reasoningLevels.isEmpty {
-                Picker("", selection: reasoningBinding) {
-                    Text("Ризонинг: по умолчанию").tag("")
-                    ForEach(chatStore.capabilities.reasoningLevels, id: \.self) { level in
-                        Text(Self.reasoningLabel(level)).tag(level)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .controlSize(compact ? .small : .regular)
-                .help("Мощность ризонинга")
+                reasoningPicker
             }
 
             Spacer()
+            streamAction
+        }
+        .foregroundStyle(.secondary)
+    }
 
+    private var compactHeader: some View {
+        HStack(spacing: 8) {
+            modelPicker(maxWidth: 190)
+            Spacer(minLength: 0)
             if chatStore.isStreaming, chatStore.streamingConversationID == conversationID {
-                Button("Стоп", systemImage: "stop.fill") {
-                    chatStore.cancelStreaming()
+                streamAction
+            } else {
+                Menu {
+                    if !chatStore.capabilities.reasoningLevels.isEmpty {
+                        reasoningPicker
+                    }
+                    if conversation?.messages.isEmpty == false {
+                        Button("Перегенерировать", systemImage: "arrow.counterclockwise") {
+                            regenerate()
+                        }
+                    }
+                } label: {
+                    Label("Параметры чата", systemImage: "ellipsis.circle")
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
-            } else if conversation?.messages.isEmpty == false {
-                Button("Перегенерировать", systemImage: "arrow.counterclockwise") {
-                    chatStore.regenerate(
-                        conversationID: conversationID,
-                        client: store.backendClient,
-                        systemPrompt: settings.chatSystemPrompt
-                    )
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
+                .labelStyle(.iconOnly)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Параметры чата")
             }
         }
         .foregroundStyle(.secondary)
+    }
+
+    private func modelPicker(maxWidth: CGFloat) -> some View {
+        Picker("Модель", selection: modelBinding) {
+            Text(defaultModelLabel).tag("")
+            ForEach(offeredModels, id: \.self) { model in
+                Text(model).tag(model)
+            }
+        }
+        .labelsHidden()
+        .frame(minWidth: 120, maxWidth: maxWidth)
+        .controlSize(compact ? .small : .regular)
+        .help("Модель. Список задаётся в настройках.")
+    }
+
+    private var reasoningPicker: some View {
+        Picker("Мощность ризонинга", selection: reasoningBinding) {
+            Text("Ризонинг: по умолчанию").tag("")
+            ForEach(chatStore.capabilities.reasoningLevels, id: \.self) { level in
+                Text(Self.reasoningLabel(level)).tag(level)
+            }
+        }
+        .labelsHidden()
+        .fixedSize()
+        .controlSize(compact ? .small : .regular)
+        .help("Мощность ризонинга")
+    }
+
+    @ViewBuilder
+    private var streamAction: some View {
+        if chatStore.isStreaming, chatStore.streamingConversationID == conversationID {
+            Button("Стоп", systemImage: "stop.fill") {
+                chatStore.cancelStreaming()
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+        } else if conversation?.messages.isEmpty == false {
+            Button("Перегенерировать", systemImage: "arrow.counterclockwise") {
+                regenerate()
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+        }
+    }
+
+    private func regenerate() {
+        chatStore.regenerate(
+            conversationID: conversationID,
+            client: store.backendClient,
+            systemPrompt: settings.chatSystemPrompt
+        )
     }
 
     /// What the provider is known to serve, plus anything hand-added in
@@ -347,6 +417,8 @@ struct ChatThreadView: View {
                 Text(attachmentError)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .lineLimit(compact ? 2 : nil)
+                    .help(attachmentError)
             }
 
             if chatStore.capabilities.refusesImages, !draft.attachments.isEmpty {
@@ -360,7 +432,11 @@ struct ChatThreadView: View {
             }
 
             if !draft.attachments.isEmpty {
-                AttachmentStrip(attachments: draft.attachments, tick: attachmentTick) { id in
+                AttachmentStrip(
+                    attachments: draft.attachments,
+                    tick: attachmentTick,
+                    compact: compact
+                ) { id in
                     draft.attachments.removeAll { $0.id == id }
                     attachmentTick &+= 1
                 }
@@ -478,21 +554,27 @@ struct ChatThreadView: View {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.png, .jpeg, .gif, .webP]
         guard panel.runModal() == .OK else { return }
-        do {
-            add(try panel.urls.map { try ChatImageLoader.attachment(fromFile: $0) })
-        } catch {
-            attachmentError = error.localizedDescription
+        let urls = panel.urls
+        Task {
+            do {
+                let attachments = try await Task.detached(priority: .userInitiated) {
+                    try urls.map { try ChatImageLoader.attachment(fromFile: $0) }
+                }.value
+                add(attachments)
+            } catch {
+                attachmentError = error.localizedDescription
+            }
         }
     }
 
     private func load(_ providers: [NSItemProvider]) {
         for provider in providers {
             _ = provider.loadDataRepresentation(for: .image) { data, _ in
-                guard let data, let image = NSImage(data: data) else { return }
-                Task { @MainActor in
-                    if let attachment = ChatImageLoader.attachment(from: image, name: "Вставка") {
-                        add([attachment])
-                    }
+                guard let data, let image = NSImage(data: data),
+                      let attachment = ChatImageLoader.attachment(from: image, name: "Вставка")
+                else { return }
+                Task { @MainActor [attachment] in
+                    add([attachment])
                 }
             }
         }
@@ -566,6 +648,7 @@ private struct StreamingBubble: View {
 private struct AttachmentStrip: View {
     let attachments: [ChatAttachment]
     let tick: Int
+    var compact = false
     var onRemove: ((String) -> Void)?
 
     var body: some View {
@@ -577,8 +660,9 @@ private struct AttachmentStrip: View {
                             Image(nsImage: image)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
-                                .frame(width: 72, height: 72)
+                                .frame(width: compact ? 44 : 72, height: compact ? 44 : 72)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .accessibilityLabel("Изображение: \(attachment.name)")
                         }
                         if let onRemove {
                             Button {
@@ -589,6 +673,7 @@ private struct AttachmentStrip: View {
                             }
                             .buttonStyle(.plain)
                             .padding(3)
+                            .accessibilityLabel("Удалить изображение \(attachment.name)")
                         }
                     }
                     .help(attachment.name)
@@ -597,7 +682,7 @@ private struct AttachmentStrip: View {
             .padding(.vertical, 2)
         }
         .scrollContentBackground(.hidden)
-        .frame(height: 80)
+        .frame(height: compact ? 52 : 80)
     }
 }
 

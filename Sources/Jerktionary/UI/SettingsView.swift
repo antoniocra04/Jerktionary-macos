@@ -41,6 +41,15 @@ struct SettingsView: View {
                     .lineLimit(3...6)
             }
 
+            Section("Оформление") {
+                Picker("Тема", selection: $settings.theme) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.russianLabel).tag(theme)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
             Section("Чат") {
                 if chats.capabilities.label.isEmpty {
                     Text("Провайдер определяется при запуске backend.")
@@ -90,8 +99,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420)
-        .padding(8)
+        .frame(minWidth: 460, idealWidth: 500, minHeight: 520, idealHeight: 620)
+        .padding(12)
         .onAppear { devices = AudioDevices.inputDevices() }
     }
 }
@@ -132,7 +141,7 @@ struct SetupWizardView: View {
                         title: "Что слушаем?",
                         subtitle: "Микрофон — вашу речь. Система — звук собеседника из Zoom/Meet, нативно, без BlackHole."
                     ) {
-                        Picker("", selection: Binding(
+                        Picker("Источник звука", selection: Binding(
                             get: { settings.audioSource },
                             set: { settings.audioSource = $0 }
                         )) {

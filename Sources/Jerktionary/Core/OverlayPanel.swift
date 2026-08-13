@@ -103,9 +103,9 @@ final class OverlayPanel {
     /// a head turn than a corner would.
     private func restoreFrame(_ panel: NSPanel) {
         let size = WindowController.overlaySize
-        if let saved = OverlayFrameKeeper.savedFrame(minWidth: WindowController.overlayMinSize.width),
-           NSScreen.screens.contains(where: { $0.visibleFrame.intersects(saved) }) {
-            panel.setFrame(saved, display: false)
+        if let saved = OverlayFrameKeeper.savedFrame(minSize: WindowController.overlayMinSize),
+           let normalized = normalizedFrame(saved, screens: NSScreen.screens) {
+            panel.setFrame(normalized, display: false)
             return
         }
         guard let screen = NSScreen.main else { return }
@@ -122,6 +122,29 @@ final class OverlayPanel {
         )
     }
 
+    /// Keeps a restored card fully reachable after monitor removal, scaling or
+    /// resolution changes. The title bar/drag surface can never land offscreen.
+    private func normalizedFrame(_ frame: NSRect, screens: [NSScreen]) -> NSRect? {
+        guard let screen = screens.max(by: {
+            intersectionArea($0.visibleFrame, frame) < intersectionArea($1.visibleFrame, frame)
+        }), intersectionArea(screen.visibleFrame, frame) > 0 else { return nil }
+
+        let visible = screen.visibleFrame
+        let minSize = WindowController.overlayMinSize
+        let maxSize = WindowController.overlayMaxSize
+        let width = min(max(frame.width, minSize.width), min(maxSize.width, visible.width))
+        let height = min(max(frame.height, minSize.height), min(maxSize.height, visible.height))
+        let x = min(max(frame.minX, visible.minX), visible.maxX - width)
+        let y = min(max(frame.minY, visible.minY), visible.maxY - height)
+        return NSRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func intersectionArea(_ lhs: NSRect, _ rhs: NSRect) -> CGFloat {
+        let intersection = lhs.intersection(rhs)
+        guard !intersection.isNull else { return 0 }
+        return intersection.width * intersection.height
+    }
+
 }
 
 /// Remembers where and how big the card was left. Stored as a string so it needs
@@ -131,10 +154,14 @@ private final class OverlayFrameKeeper: NSObject, NSWindowDelegate {
     static var key: UInt8 = 0
     nonisolated static let defaultsKey = "settings.overlayFrame"
 
-    nonisolated static func savedFrame(minWidth: CGFloat) -> NSRect? {
+    nonisolated static func savedFrame(minSize: NSSize) -> NSRect? {
         guard let raw = UserDefaults.standard.string(forKey: defaultsKey) else { return nil }
         let rect = NSRectFromString(raw)
-        return rect.width >= minWidth ? rect : nil
+        guard rect.width.isFinite, rect.height.isFinite,
+              rect.minX.isFinite, rect.minY.isFinite,
+              rect.width >= minSize.width, rect.height >= minSize.height
+        else { return nil }
+        return rect
     }
 
     private func remember(_ window: NSWindow?) {

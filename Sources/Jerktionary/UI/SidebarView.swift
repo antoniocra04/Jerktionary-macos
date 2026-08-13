@@ -34,8 +34,7 @@ struct SidebarView: View {
                 }
 
             }
-            // Clears the traffic lights under the hidden title bar.
-            .padding(.top, 44)
+            .padding(.top, 16)
             .padding(.horizontal, 12)
             .padding(.bottom, 16)
         }
@@ -93,6 +92,7 @@ private struct MeetingRow: View {
     let meeting: MeetingRecord
     let open: () -> Void
     @State private var hovering = false
+    @State private var confirmingDelete = false
 
     var body: some View {
         Button(action: open) {
@@ -117,8 +117,16 @@ private struct MeetingRow: View {
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Удалить", role: .destructive) {
+                confirmingDelete = true
+            }
+        }
+        .alert("Удалить встречу?", isPresented: $confirmingDelete) {
+            Button("Удалить", role: .destructive) {
                 meetings.delete(meeting.id)
             }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Транскрипт и ответы этой встречи нельзя будет восстановить.")
         }
     }
 }
@@ -130,16 +138,22 @@ struct ComponentsListView: View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(components) { component in
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(component.ready ? .green : (component.required ? .red : .orange))
-                        .frame(width: 6, height: 6)
+                    Image(systemName: component.ready
+                          ? "checkmark.circle.fill"
+                          : (component.required ? "xmark.circle.fill" : "exclamationmark.triangle.fill"))
+                        .foregroundStyle(component.ready ? .green : (component.required ? .red : .orange))
                     Text(component.name)
                         .font(.caption)
                     Spacer()
                 }
                 .help(component.details)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(component.name)
+                .accessibilityValue(component.ready
+                                    ? "готов"
+                                    : (component.required ? "обязательный компонент не готов" : "необязательный компонент не готов"))
+                .accessibilityHint(component.details)
             }
         }
     }
 }
-

@@ -9,7 +9,7 @@ enum MainTab: String, CaseIterable, Identifiable {
 }
 
 /// A free-form note, persisted independently of meetings.
-struct Note: Codable, Identifiable, Hashable {
+struct Note: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var title: String
     var body: String
@@ -60,6 +60,10 @@ final class NotesStore: ObservableObject {
     private static let persistDebounceNanos: UInt64 = 400_000_000
     private let ioQueue = DispatchQueue(label: "com.jerktionary.notes.io", qos: .utility)
     private var persistTask: Task<Void, Never>?
+    private var loadRequested = false
+    private var loadFinished = false
+    private var mutatedDuringLoad = false
+    private var deletedDuringLoad: Set<String> = []
 
     private var storeURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -72,13 +76,45 @@ final class NotesStore: ObservableObject {
     }
 
     func load() {
-        guard let data = try? Data(contentsOf: storeURL),
-              let parsed = try? JSONDecoder().decode([Note].self, from: data)
-        else {
-            notes = []
-            return
+        guard !loadRequested else { return }
+        loadRequested = true
+        let url = storeURL
+        ioQueue.async { [weak self] in
+            let parsed: [Note]
+            if let data = try? Data(contentsOf: url),
+               let decoded = try? JSONDecoder().decode([Note].self, from: data) {
+                parsed = decoded
+            } else {
+                parsed = []
+            }
+            DispatchQueue.main.async {
+                self?.finishLoading(parsed)
+            }
         }
-        notes = parsed.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func finishLoading(_ persisted: [Note]) {
+        var merged = persisted.filter { !deletedDuringLoad.contains($0.id) }
+        for current in notes {
+            if let index = merged.firstIndex(where: { $0.id == current.id }) {
+                merged[index] = current
+            } else {
+                merged.append(current)
+            }
+        }
+        notes = merged.sorted { $0.updatedAt > $1.updatedAt }
+        loadFinished = true
+        if mutatedDuringLoad {
+            persistNow()
+        }
+        mutatedDuringLoad = false
+        deletedDuringLoad = []
+    }
+
+    private func markMutation(deleting id: String? = nil) {
+        guard !loadFinished else { return }
+        mutatedDuringLoad = true
+        if let id { deletedDuringLoad.insert(id) }
     }
 
     func note(id: String) -> Note? {
@@ -88,6 +124,7 @@ final class NotesStore: ObservableObject {
     /// Creates an empty note at the top and returns it for immediate editing.
     @discardableResult
     func create() -> Note {
+        markMutation()
         let note = Note.new()
         notes.insert(note, at: 0)
         persistNow()
@@ -104,6 +141,7 @@ final class NotesStore: ObservableObject {
         // the same value; without this guard the note would jump to the top on
         // focus alone, before any editing.
         guard existing.title != note.title || existing.body != note.body else { return }
+        markMutation()
         var updated = note
         updated.updatedAt = Date.now.timeIntervalSince1970 * 1000
         notes[index] = updated
@@ -112,6 +150,7 @@ final class NotesStore: ObservableObject {
     }
 
     func delete(_ id: String) {
+        markMutation(deleting: id)
         notes.removeAll { $0.id == id }
         persistNow()
     }
@@ -136,6 +175,10 @@ final class NotesStore: ObservableObject {
     }
 
     private func persistNow() {
+        guard loadFinished else {
+            mutatedDuringLoad = true
+            return
+        }
         persistTask?.cancel()
         persistTask = nil
         // The serial queue keeps writes ordered, so the newest snapshot wins.
@@ -157,9 +200,13 @@ final class NotesStore: ObservableObject {
     }
 
     static func formatDate(_ millis: Double) -> String {
+        dateFormatter.string(from: Date(timeIntervalSince1970: millis / 1000))
+    }
+
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
         formatter.dateFormat = "dd.MM.yyyy, HH:mm"
-        return formatter.string(from: Date(timeIntervalSince1970: millis / 1000))
-    }
+        return formatter
+    }()
 }

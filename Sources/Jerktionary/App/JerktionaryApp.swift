@@ -34,10 +34,46 @@ struct JerktionaryApp: App {
                     minHeight: WindowController.normalMinSize.height
                 )
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandMenu("Навигация") {
+                Button(store.sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель") {
+                    store.sidebarVisible.toggle()
+                }
+                Divider()
+                Button("Сессия") { store.mainTab = .session }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Заметки") { store.mainTab = .notes }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("Чат") { store.mainTab = .chat }
+                    .keyboardShortcut("3", modifiers: .command)
+            }
+            CommandMenu("Сессия") {
+                Button(store.isListening ? "Остановить прослушивание" : "Начать прослушивание") {
+                    Task { await store.toggleListening() }
+                }
+                .disabled(!store.isListening && (!store.backendReady || store.backendUnavailable))
+                Divider()
+                Button("Компактный режим") {
+                    store.toggleOverlay()
+                }
+                Button(store.contentProtectionEnabled
+                       ? "Показывать при захвате экрана"
+                       : "Скрыть при захвате экрана") {
+                    store.contentProtectionEnabled.toggle()
+                    WindowController.setContentProtection(store.contentProtectionEnabled)
+                }
+            }
+        }
+
+        Settings {
+            SettingsView()
+                .environmentObject(settings)
+                .environmentObject(store)
+                .environmentObject(store.chats)
+                .preferredColorScheme(settings.theme.colorScheme)
         }
     }
 }
@@ -79,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             store?.notes.flushPendingWrites()
             store?.chats.flushPendingWrites()
+            store?.meetings.flushPendingWrites()
         }
     }
 

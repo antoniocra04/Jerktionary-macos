@@ -9,14 +9,16 @@ import SwiftUI
 /// microphone update re-rendered the whole editor behind the session view.
 struct NotesView: View {
     @EnvironmentObject private var notesStore: NotesStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedID: String?
 
     private var notes: [Note] { notesStore.notes }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
+        HSplitView {
             noteList
-                .frame(width: 260)
+                .frame(minWidth: 200, idealWidth: 240, maxWidth: 320)
+                .padding(.trailing, 8)
 
             Group {
                 if let selectedID, let note = notesStore.note(id: selectedID) {
@@ -26,10 +28,11 @@ struct NotesView: View {
                     emptyEditor
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.leading, 8)
         }
         .padding(.horizontal, 28)
-        .padding(.top, 4)
+        .padding(.top, 16)
         .padding(.bottom, 28)
         .onAppear {
             notesStore.load()
@@ -54,6 +57,7 @@ struct NotesView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.tint)
                 .help("Новая заметка")
+                .accessibilityLabel("Новая заметка")
             }
 
             if notes.isEmpty {
@@ -77,7 +81,10 @@ struct NotesView: View {
                         }
                     }
                     // Animate the move-to-top reorder when a note is edited.
-                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: notes.map(\.id))
+                    .animation(
+                        reduceMotion ? nil : .easeOut(duration: 0.2),
+                        value: notes.map(\.id)
+                    )
                 }
                 .scrollContentBackground(.hidden)
             }
@@ -104,6 +111,7 @@ private struct NoteRow: View {
     let open: () -> Void
     let onDelete: () -> Void
     @State private var hovering = false
+    @State private var confirmingDelete = false
 
     var body: some View {
         Button(action: open) {
@@ -127,7 +135,15 @@ private struct NoteRow: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .contextMenu {
+            Button("Удалить", role: .destructive) {
+                confirmingDelete = true
+            }
+        }
+        .alert("Удалить заметку?", isPresented: $confirmingDelete) {
             Button("Удалить", role: .destructive, action: onDelete)
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Текст заметки нельзя будет восстановить.")
         }
     }
 }
@@ -191,9 +207,9 @@ private struct NoteEditor: View {
                     .textFieldStyle(.plain)
                     .font(.title2.weight(.bold))
 
-                Picker("", selection: $preview) {
-                    Image(systemName: "pencil").tag(false)
-                    Image(systemName: "eye").tag(true)
+                Picker("Режим заметки", selection: $preview) {
+                    Label("Редактирование", systemImage: "pencil").tag(false)
+                    Label("Просмотр", systemImage: "eye").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()

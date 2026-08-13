@@ -81,6 +81,53 @@ final class TermMergerTests: XCTestCase {
     }
 }
 
+final class TranscriptDocumentTests: XCTestCase {
+    func testCommonPrefixCountsCharactersRatherThanUTF16Units() {
+        XCTAssertEqual(
+            TranscriptDocument.commonPrefixCharacterCount("Привет 👋 мир", "Привет 👋 друг"),
+            9
+        )
+    }
+
+    func testUTF16OffsetHandlesEmoji() {
+        XCTAssertEqual(
+            TranscriptDocument.utf16Offset(forCharacterOffset: 3, in: "a👋b"),
+            4
+        )
+    }
+
+    func testEarliestChangedTermDetectsAddedAndRemovedHighlights() {
+        let earlier = TranscriptTerm(
+            text: "REST", normalized: "rest", start: 5, end: 9,
+            type: "concept", confidence: 0.9
+        )
+        let later = TranscriptTerm(
+            text: "Swift", normalized: "swift", start: 20, end: 25,
+            type: "concept", confidence: 0.9
+        )
+        XCTAssertEqual(
+            TranscriptDocument.earliestChangedTermStart([later], [earlier, later]),
+            5
+        )
+        XCTAssertEqual(
+            TranscriptDocument.earliestChangedTermStart([earlier, later], [later]),
+            5
+        )
+        XCTAssertNil(TranscriptDocument.earliestChangedTermStart([later], [later]))
+    }
+
+    func testTailBuildPreservesOriginalTermLink() {
+        let term = TranscriptTerm(
+            text: "Swift", normalized: "swift", start: 6, end: 11,
+            type: "concept", confidence: 0.9
+        )
+        let tail = TranscriptDocument.build(text: "Swift", terms: [term], characterOffset: 6)
+        XCTAssertEqual(tail.string, "Swift")
+        let link = tail.attribute(.link, at: 0, effectiveRange: nil) as? URL
+        XCTAssertEqual(link, TranscriptDocument.linkURL(for: term))
+    }
+}
+
 final class PCMTests: XCTestCase {
     func testInt16ConversionBounds() {
         let data = PCM.int16LEData(from: [1.0, -1.0, 0], sourceSampleRate: 16_000)
