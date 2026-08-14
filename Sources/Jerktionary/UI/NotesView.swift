@@ -61,7 +61,7 @@ struct NotesView: View {
             }
 
             if notes.isEmpty {
-                Text("Заметок пока нет. Нажмите ✎, чтобы создать.")
+                Text("Создайте первую заметку.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,13 +92,19 @@ struct NotesView: View {
     }
 
     private var emptyEditor: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 14) {
             Image(systemName: "note.text")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(Theme.lavenderGradient)
             Text("Выберите заметку или создайте новую")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            Button("Новая заметка", systemImage: "square.and.pencil") {
+                let note = notesStore.create()
+                selectedID = note.id
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -133,6 +139,7 @@ private struct NoteRow: View {
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Удалить", role: .destructive) {
@@ -223,7 +230,7 @@ private struct NoteEditor: View {
                 ScrollView {
                     Group {
                         if draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Пусто. Переключитесь в режим ✎, чтобы писать. Поддерживается Markdown.")
+                            Text("Заметка пока пустая.")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -249,9 +256,6 @@ private struct NoteEditor: View {
             }
 
             HStack {
-                Text("Markdown")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
                 Spacer()
                 Text("Изменено \(NotesStore.formatDate(note?.updatedAt ?? 0))")
                     .font(.caption2)

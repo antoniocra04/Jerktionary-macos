@@ -30,7 +30,8 @@ final class GlobalHotkeys {
     private var retryTimer: Timer?
     private var eventHandler: EventHandlerRef?
 
-    func register(_ handlers: [Action: () -> Void]) {
+    @discardableResult
+    func register(_ handlers: [Action: () -> Void]) -> Set<Action> {
         self.handlers = handlers
 
         var eventType = EventTypeSpec(
@@ -68,6 +69,7 @@ final class GlobalHotkeys {
 
         failedActions = Set(Action.allCases.filter { !register($0) })
         scheduleRetryIfNeeded()
+        return failedActions
     }
 
     /// A second copy can temporarily own the same Carbon hotkeys — notably

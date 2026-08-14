@@ -39,9 +39,10 @@ struct JerktionaryApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandMenu("Навигация") {
-                Button(store.sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель") {
+                Button(store.sidebarVisible ? "Скрыть историю встреч" : "Показать историю встреч") {
                     store.sidebarVisible.toggle()
                 }
+                .disabled(store.mainTab != .session)
                 Divider()
                 Button("Сессия") { store.mainTab = .session }
                     .keyboardShortcut("1", modifiers: .command)
@@ -51,6 +52,18 @@ struct JerktionaryApp: App {
                     .keyboardShortcut("3", modifiers: .command)
             }
             CommandMenu("Сессия") {
+                Button("Ответить сейчас — Ctrl+Shift+Space") {
+                    store.answerNow()
+                }
+                .disabled(store.currentText.isEmpty || store.answers.isGenerating)
+                Button("Ответить с полным контекстом — Ctrl+Shift+Enter") {
+                    store.fullContextAnswer()
+                }
+                .disabled(store.currentText.isEmpty || store.answers.isGenerating)
+                if store.answers.isGenerating {
+                    Button("Остановить ответ") { store.cancelAnswer() }
+                }
+                Divider()
                 Button(store.isListening ? "Остановить прослушивание" : "Начать прослушивание") {
                     Task { await store.toggleListening() }
                 }
@@ -96,12 +109,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard self.store == nil else { return }
         self.store = store
 
-        hotkeys.register([
+        let failed = hotkeys.register([
             .answerNow: { [weak store] in store?.answerNow() },
             .toggleOverlay: { [weak store] in store?.toggleOverlay() },
             .fullContextAnswer: { [weak store] in store?.fullContextAnswer() },
             .screenshotToChat: { [weak store] in store?.captureScreenshotToChat() }
         ])
+        if !failed.isEmpty {
+            store.showNotice("Некоторые глобальные сочетания клавиш недоступны")
+        }
 
         // Stealth by default, like the Electron app.
         WindowController.setContentProtection(true)

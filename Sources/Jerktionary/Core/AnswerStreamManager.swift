@@ -1,8 +1,7 @@
 import Foundation
 
-/// Streams and caches live answers per question+depth — port of useLiveAnswer's
-/// module-wide inflight map: a stream keeps running even when no card shows it,
-/// and the shallow answer pre-generates the deep variant in the background.
+/// Streams and caches answers requested explicitly by the user. Only one answer
+/// request may run at a time; transcript updates never enter this type.
 @MainActor
 final class AnswerStreamManager: ObservableObject {
     struct Key: Hashable {
@@ -18,6 +17,7 @@ final class AnswerStreamManager: ObservableObject {
 
     @Published private(set) var cache: [Key: LiveAnswer] = [:]
     @Published private(set) var inflight: [Key: StreamState] = [:]
+    @Published private(set) var activeKey: Key?
 
     private var tasks: [Key: Task<Void, Never>] = [:]
     private unowned let store: AppStore
@@ -37,13 +37,22 @@ final class AnswerStreamManager: ObservableObject {
         return (nil, false, nil)
     }
 
-    func ensureStream(question: String, deep: Bool, context: String) {
+    var isGenerating: Bool { activeKey != nil }
+
+    @discardableResult
+    func ensureStream(
+        question: String,
+        deep: Bool,
+        context: String,
+        fullContext: Bool = false
+    ) -> Bool {
         let key = Key(question: question, deep: deep)
-        guard cache[key] == nil, tasks[key] == nil else { return }
+        guard cache[key] == nil, tasks[key] == nil, activeKey == nil else { return false }
 
         inflight[key] = StreamState()
+        activeKey = key
         store.answerStreamingCount += 1
-        let truncateContext = !store.popFullContext()
+        let truncateContext = !fullContext
         let client = store.backendClient
         let profile = store.settings.aboutMe
         let meetingContext = store.meetingContext
@@ -67,31 +76,46 @@ final class AnswerStreamManager: ObservableObject {
                 if let final {
                     self.cache[key] = final
                     self.store.recordAnswer(question: question, answer: final)
-                    // Pre-generate the detailed variant so "Подробнее" is instant.
-                    if !deep, self.cache[Key(question: question, deep: true)] == nil {
-                        self.ensureStream(question: question, deep: true, context: context)
-                    }
+                    self.store.showNotice(deep ? "Подробный ответ готов" : "Ответ готов")
                 }
             } catch {
-                self.inflight[key]?.error = error.localizedDescription
-                AccessibilityAnnouncer.announce(error.localizedDescription)
+                if !Task.isCancelled {
+                    self.inflight[key]?.error = error.localizedDescription
+                    AccessibilityAnnouncer.announce(error.localizedDescription)
+                }
             }
             self.inflight[key]?.done = true
             self.tasks[key] = nil
+            if self.activeKey == key { self.activeKey = nil }
             self.store.answerStreamingCount = max(0, self.store.answerStreamingCount - 1)
             // Keep errored streams visible until regenerate; successful ones move to cache.
             if self.inflight[key]?.error == nil {
                 self.inflight[key] = nil
             }
         }
+        return true
     }
 
     func regenerate(question: String, deep: Bool, context: String) {
         let key = Key(question: question, deep: deep)
-        guard tasks[key] == nil else { return }
+        guard tasks[key] == nil, activeKey == nil else {
+            store.showNotice("Ответ уже готовится")
+            return
+        }
         cache[key] = nil
         inflight[key] = nil
         ensureStream(question: question, deep: deep, context: context)
+    }
+
+    @discardableResult
+    func cancelCurrent() -> Bool {
+        guard let activeKey, let task = tasks[activeKey] else { return false }
+        task.cancel()
+        tasks[activeKey] = nil
+        inflight[activeKey] = StreamState(done: true, error: "Генерация остановлена")
+        self.activeKey = nil
+        store.answerStreamingCount = max(0, store.answerStreamingCount - 1)
+        return true
     }
 
     #if DEBUG
@@ -107,5 +131,6 @@ final class AnswerStreamManager: ObservableObject {
         tasks = [:]
         inflight = [:]
         cache = [:]
+        activeKey = nil
     }
 }

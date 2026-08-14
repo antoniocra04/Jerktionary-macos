@@ -15,7 +15,7 @@ struct TranscriptView: View {
             if store.currentText.isEmpty {
                 Text(store.isListening
                      ? "Слушаю… говорите, транскрипт появится здесь."
-                     : "Нажмите «Слушать», чтобы начать транскрипцию.")
+                     : "Расшифровка появится здесь.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 110, alignment: .center)

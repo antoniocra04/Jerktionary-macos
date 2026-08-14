@@ -36,10 +36,10 @@ extension AppStore {
     var overlayFault: String? {
         if let error = microphoneError ?? websocketError { return error }
         if backendStatusLoaded, backendUnavailable {
-            return "Backend недоступен — ответы не придут. Проверьте, что он запущен."
+            return "Нет связи с сервисом ответов. Проверьте подключение в настройках."
         }
         if backendStatusLoaded, !backendReady {
-            return "Backend запущен, но не готов отвечать."
+            return "Сервис ответов ещё не готов."
         }
         if isListening, connectionStatus == .error {
             return "Нет связи с распознаванием."
@@ -59,6 +59,7 @@ extension AppStore {
     func hideOverlay() {
         overlayMode = false
         OverlayPanel.shared.hide()
+        showNotice("Компактное окно скрыто · Вернуть: Ctrl+Shift+O")
     }
 
     func toggleOverlay() {
@@ -96,7 +97,7 @@ extension AppStore {
     /// Showing the chat means two different things depending on the mode, and
     /// setting only `mainTab` was the bug: in the compact card the main window
     /// is hidden and the card shows `overlayPane`, so a screenshot taken while
-    /// the card sat on Ответ or Транскрипт went into `pendingAttachments` with
+    /// the card sat on Эфир went into `pendingAttachments` with
     /// no composer mounted to take it. Nothing appeared, and the hotkey looked
     /// dead.
     func deliverToChat(_ attachment: ChatAttachment) async {
@@ -109,12 +110,14 @@ extension AppStore {
         let prompt = settings.chatScreenshotPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else {
             chats.pendingAttachments.append(attachment)
+            showNotice("Снимок добавлен в чат")
             return
         }
 
         await chats.ensureCapabilities(client: backendClient, model: conversation.model)
         guard !chats.capabilities.refusesImages else {
             chats.pendingAttachments.append(attachment)
+            showNotice("Снимок добавлен в чат")
             return
         }
         chats.send(
@@ -124,6 +127,7 @@ extension AppStore {
             client: backendClient,
             systemPrompt: settings.chatSystemPrompt
         )
+        showNotice("Снимок отправлен в чат")
     }
 
     /// Ctrl+Shift+S: grab the screen into the chat without showing anything.
@@ -144,6 +148,7 @@ extension AppStore {
                 attachment = try await ScreenshotCapture.captureScreen()
             } catch {
                 chats.transientError = error.localizedDescription
+                showNotice("Не удалось сделать снимок")
                 return
             }
 

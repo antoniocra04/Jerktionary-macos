@@ -242,7 +242,7 @@ struct BackendClient {
 
     private func getJSON<T: Decodable>(_ path: String) async throws -> T {
         guard let url = URL(string: baseUrl + path) else {
-            throw BackendError(message: "Некорректный адрес backend", status: 0)
+            throw BackendError(message: "Некорректный адрес сервиса ответов", status: 0)
         }
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -251,7 +251,7 @@ struct BackendClient {
 
     private func postJSON<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
         guard let url = URL(string: baseUrl + path) else {
-            throw BackendError(message: "Некорректный адрес backend", status: 0)
+            throw BackendError(message: "Некорректный адрес сервиса ответов", status: 0)
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -267,10 +267,10 @@ struct BackendClient {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            throw BackendError(message: "Backend недоступен. Проверьте адрес и что backend запущен.", status: 0)
+            throw BackendError(message: "Нет связи с сервисом ответов. Проверьте адрес в настройках.", status: 0)
         }
         guard let http = response as? HTTPURLResponse else {
-            throw BackendError(message: "Некорректный ответ backend", status: 0)
+            throw BackendError(message: "Сервис ответов вернул некорректные данные", status: 0)
         }
         guard (200..<300).contains(http.statusCode) else {
             let payload = try? JSONDecoder().decode(ApiErrorPayload.self, from: data)
@@ -298,7 +298,7 @@ struct BackendClient {
         AsyncThrowingStream { continuation in
             let task = Task {
                 guard let url = URL(string: baseUrl + path) else {
-                    continuation.finish(throwing: BackendError(message: "Некорректный адрес backend", status: 0))
+                    continuation.finish(throwing: BackendError(message: "Некорректный адрес сервиса ответов", status: 0))
                     return
                 }
                 var request = URLRequest(url: url)

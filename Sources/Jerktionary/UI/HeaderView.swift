@@ -47,5 +47,8 @@ struct LevelMeterView: View {
             }
         }
         .frame(width: 96, height: 5)
+        .accessibilityElement()
+        .accessibilityLabel("Уровень звука")
+        .accessibilityValue("\(Int(level * 100)) процентов")
     }
 }

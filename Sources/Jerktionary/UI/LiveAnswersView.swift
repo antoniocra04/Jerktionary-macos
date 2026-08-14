@@ -1,16 +1,130 @@
 import AppKit
 import SwiftUI
 
+/// The only entry point into live-answer generation. Transcript changes never
+/// call the answer manager; the user freezes a request with this control.
+struct AnswerRequestBar: View {
+    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var answers: AnswerStreamManager
+
+    var compact = false
+    @State private var editing = false
+    @State private var draft = ""
+
+    private var hasTranscript: Bool {
+        TranscriptExcerpt.latest(in: store.currentText) != nil
+    }
+
+    private var canGenerate: Bool {
+        hasTranscript && store.backendReady && !store.backendUnavailable
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if editing {
+                HStack(spacing: 8) {
+                    TextField("Что нужно подсказать?", text: $draft)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(submitDraft)
+
+                    Button(action: submitDraft) {
+                        Image(systemName: "arrow.up")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help("Ответить")
+                    .accessibilityLabel("Ответить на введённый запрос")
+
+                    Button {
+                        editing = false
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Отменить редактирование")
+                    .accessibilityLabel("Отменить редактирование")
+                }
+            } else {
+                HStack(spacing: 8) {
+                    if answers.isGenerating {
+                        Button {
+                            store.cancelAnswer()
+                        } label: {
+                            Label("Остановить", systemImage: "stop.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .tint(.red)
+                    } else {
+                        Button {
+                            store.answerNow()
+                        } label: {
+                            Label(compact ? "Ответить" : "Ответить сейчас", systemImage: "sparkles")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .disabled(!canGenerate)
+                        .help(answerButtonHelp)
+                    }
+
+                    Menu {
+                        Button("Уточнить запрос…", systemImage: "pencil") {
+                            draft = TranscriptExcerpt.latest(in: store.currentText) ?? ""
+                            editing = true
+                        }
+                        Button("Ответить с полным контекстом", systemImage: "text.append") {
+                            store.fullContextAnswer()
+                        }
+                        .disabled(!canGenerate)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Другие способы ответа")
+                    .accessibilityLabel("Другие способы ответа")
+
+                    if answers.isGenerating {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Ответ готовится")
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(compact ? 8 : 12)
+        .background(
+            Theme.tint.opacity(0.07),
+            in: RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+        )
+    }
+
+    private func submitDraft() {
+        let request = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !request.isEmpty else { return }
+        if store.requestAnswer(question: request) { editing = false }
+    }
+
+    private var answerButtonHelp: String {
+        if !store.backendReady || store.backendUnavailable {
+            return "Сервис ответов сейчас недоступен"
+        }
+        if !hasTranscript { return "Пока недостаточно речи для ответа" }
+        return "Зафиксировать последнюю реплику и подготовить ответ (Ctrl+Shift+Space)"
+    }
+}
+
 /// One answer card at a time with arrow-key/chevron navigation through the
-/// question history — mirrors the Electron LiveAnswer pager: a new question
-/// snaps back to the latest answer, otherwise the chosen position is kept.
+/// explicitly requested answer history.
 struct LiveAnswersView: View {
     @EnvironmentObject private var store: AppStore
     @State private var navHead: String?
     @State private var navIndex = 0
 
-    private var head: String? { store.answeredQuestions.first }
-    private var total: Int { store.answeredQuestions.count }
+    private var head: String? { store.answerRequests.first }
+    private var total: Int { store.answerRequests.count }
 
     /// Derived: when a new question arrived (head changed), show the newest.
     private var index: Int {
@@ -22,8 +136,8 @@ struct LiveAnswersView: View {
             if total == 0 {
                 emptyState
             } else {
-                AnswerCardView(question: store.answeredQuestions[index])
-                    .id(store.answeredQuestions[index])
+                AnswerCardView(question: store.answerRequests[index])
+                    .id(store.answerRequests[index])
 
                 if total > 1 {
                     pager
@@ -47,26 +161,24 @@ struct LiveAnswersView: View {
 
     private var pager: some View {
         HStack {
-            Text(index == 0 ? "последний вопрос" : "\(total - index) из \(total)")
+            Text(index == 0 ? "Последний ответ" : "\(total - index) из \(total)")
             Spacer()
-            Text("← → переключение")
-                .foregroundStyle(.tertiary)
             Button {
                 move(+1)
             } label: {
                 Image(systemName: "chevron.left")
             }
             .disabled(index >= total - 1)
-            .help("Более старый вопрос")
-            .accessibilityLabel("Более старый вопрос")
+            .help("Более старый ответ")
+            .accessibilityLabel("Более старый ответ")
             Button {
                 move(-1)
             } label: {
                 Image(systemName: "chevron.right")
             }
             .disabled(index <= 0)
-            .help("Более новый вопрос")
-            .accessibilityLabel("Более новый вопрос")
+            .help("Более новый ответ")
+            .accessibilityLabel("Более новый ответ")
         }
         .buttonStyle(.borderless)
         .font(.caption)
@@ -76,10 +188,7 @@ struct LiveAnswersView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Живой ответ", systemImage: "sparkles")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(Theme.tint)
-            Text("Задайте вопрос вслух — «что такое…», «как…», «почему…» — и ответ для проговаривания появится здесь. Прошлые ответы переключаются стрелками, Ctrl+Shift+Space отвечает на последнюю фразу.")
+            Text("Когда понадобится подсказка, нажмите «Ответить сейчас».")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -310,7 +419,15 @@ struct AnswerCardView: View {
         Button(deep ? "Короче" : "Подробнее") {
             deep.toggle()
             if deep {
-                answers.ensureStream(question: question, deep: true, context: store.currentText)
+                let started = answers.ensureStream(
+                    question: question,
+                    deep: true,
+                    context: store.currentText
+                )
+                if !started, answers.state(question: question, deep: true).answer == nil {
+                    deep = false
+                    store.showNotice("Ответ уже готовится")
+                }
             }
         }
     }
@@ -337,21 +454,37 @@ struct AnswerCardView: View {
 /// a Journal reflection prompt.
 struct MeetingContextField: View {
     @EnvironmentObject private var store: AppStore
+    var compact = false
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Контекст встречи")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.tint)
+        if compact {
+            fields
+                .padding(10)
+                .background(
+                    Theme.card.opacity(0.72),
+                    in: RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+                )
+        } else {
+            fields.journalPromptCard(padding: 14)
+        }
+    }
+
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: compact ? 4 : 8) {
+            if !compact {
+                Text("Контекст встречи")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.tint)
+            }
             TextField(
-                "Вакансия, компания, тема разговора — подсказки для ответов",
+                compact ? "Контекст встречи" : "Вакансия, компания или тема разговора",
                 text: $store.meetingContext,
                 axis: .vertical
             )
             .textFieldStyle(.plain)
             .font(.callout)
-            .lineLimit(2...4)
+            .lineLimit(compact ? 1...2 : 2...4)
         }
-        .journalPromptCard(padding: 14)
     }
 }

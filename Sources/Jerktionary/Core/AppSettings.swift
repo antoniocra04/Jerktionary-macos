@@ -17,24 +17,21 @@ enum AudioSource: String, CaseIterable, Identifiable {
 /// What the compact overlay shows. Kept small on purpose: the card is meant to
 /// be glanced at, not worked in.
 enum OverlayPane: String, CaseIterable, Identifiable {
-    case answer
+    case live
     case chat
-    case transcript
     var id: String { rawValue }
 
     var russianLabel: String {
         switch self {
-        case .answer: "Ответ"
+        case .live: "Эфир"
         case .chat: "Чат"
-        case .transcript: "Транскрипт"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .answer: "sparkles"
+        case .live: "waveform.and.mic"
         case .chat: "bubble.left.and.bubble.right"
-        case .transcript: "waveform"
         }
     }
 }
@@ -79,13 +76,16 @@ final class AppSettings: ObservableObject {
     /// material only — never the text, which the old whole-panel alpha took to
     /// roughly 1.5:1 at the bottom of its range. The floor keeps the card
     /// findable on a busy desktop without making the control cosmetic.
-    static let overlayOpacityRange = 0.35...1.0
+    static let overlayOpacityRange = 0.70...1.0
     @AppStorage("settings.overlayOpacity") var overlayOpacity = 0.85
     /// Which pane the compact overlay shows.
-    @AppStorage("settings.overlayPane") private var overlayPaneRaw = OverlayPane.answer.rawValue
+    @AppStorage("settings.overlayPane") private var overlayPaneRaw = OverlayPane.live.rawValue
 
     var overlayPane: OverlayPane {
-        get { OverlayPane(rawValue: overlayPaneRaw) ?? .answer }
+        get {
+            if overlayPaneRaw == "answer" || overlayPaneRaw == "transcript" { return .live }
+            return OverlayPane(rawValue: overlayPaneRaw) ?? .live
+        }
         set { overlayPaneRaw = newValue.rawValue }
     }
 
@@ -139,6 +139,17 @@ final class AppSettings: ObservableObject {
             cleaned = "http://" + cleaned
         }
         return cleaned
+    }
+
+    var hasValidBackendUrl: Bool {
+        let value = backendHttpUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty,
+              let url = URL(string: normalizedHttpUrl),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host != nil
+        else { return false }
+        return true
     }
 
     var websocketUrl: URL? {

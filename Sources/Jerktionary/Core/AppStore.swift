@@ -23,12 +23,13 @@ final class AppStore: ObservableObject {
     @Published private(set) var terms: [TranscriptTerm] = []
     @Published private(set) var connectionStatus: WsConnectionStatus = .disconnected
     @Published private(set) var isListening = false
-    @Published private(set) var answeredQuestions: [String] = []
+    @Published private(set) var answerRequests: [String] = []
     @Published private(set) var sessionAnswers: [SessionAnswer] = []
     @Published private(set) var lastExplanations: [LastExplanation] = []
     @Published var meetingContext = ""
     @Published var microphoneError: String?
     @Published var websocketError: String?
+    @Published var transientNotice: String?
 
     // MARK: Backend status
     @Published private(set) var backendReady = false
@@ -40,17 +41,23 @@ final class AppStore: ObservableObject {
     // MARK: UI state
     @Published var overlayMode = false
     @Published var contentProtectionEnabled = true
-    @Published var sidebarVisible = true
+    // The live assistant is the primary surface. History remains one toolbar
+    // click away instead of consuming a quarter of every fresh session.
+    @Published var sidebarVisible = false
+    @Published private(set) var sessionHasUnreadAnswer = false
     /// Which main working area is shown. Purely a view switch: the listening
     /// pipeline (audio + WebSocket + answer streams) runs in this store and is
     /// unaffected, so transcription and answers keep going in the Notes tab.
-    @Published var mainTab: MainTab = .session
+    @Published var mainTab: MainTab = .session {
+        didSet {
+            if mainTab == .session { sessionHasUnreadAnswer = false }
+        }
+    }
     /// Meeting opened from the sidebar history (shown as an in-window modal).
     @Published var selectedMeeting: MeetingRecord?
 
     private(set) var meetingStartedAt: Date?
-    private var fullContextRequested = false
-    var answerStreamingCount = 0
+    @Published var answerStreamingCount = 0
 
     let settings: AppSettings
     let meetings: MeetingsStore
@@ -66,8 +73,6 @@ final class AppStore: ObservableObject {
     private var micCapture: MicrophoneCapture?
     private var systemCapture: SystemAudioCapture?
     private var statusPollTask: Task<Void, Never>?
-    private var questionSettleTask: Task<Void, Never>?
-
     var backendClient: BackendClient {
         BackendClient(baseUrl: settings.normalizedHttpUrl)
     }
@@ -103,6 +108,7 @@ final class AppStore: ObservableObject {
             case .system:
                 try await startSystemAudio()
             }
+            showNotice("Прослушивание начато")
         } catch {
             wsClient?.disconnect()
             wsClient = nil
@@ -126,12 +132,15 @@ final class AppStore: ObservableObject {
         // Archive the finished meeting; failures must not break stopping.
         if let record = buildMeetingRecord() {
             meetings.save(record)
+            showNotice("Встреча сохранена")
+        } else {
+            showNotice("Прослушивание остановлено")
         }
     }
 
     private func connectWebSocket() {
         guard let url = settings.websocketUrl else {
-            websocketError = "Некорректный адрес backend"
+            websocketError = "Некорректный адрес сервиса ответов"
             return
         }
         wsClient?.disconnect()
@@ -140,13 +149,21 @@ final class AppStore: ObservableObject {
             Task { @MainActor [weak self] in self?.handleWsEvent(event) }
         }
         client.onStatus = { [weak self] status in
-            Task { @MainActor [weak self] in self?.connectionStatus = status }
+            Task { @MainActor [weak self] in self?.updateConnectionStatus(status) }
         }
         client.onError = { [weak self] message in
             Task { @MainActor [weak self] in self?.websocketError = message }
         }
         wsClient = client
         client.connect()
+    }
+
+    private func updateConnectionStatus(_ status: WsConnectionStatus) {
+        let wasInterrupted = connectionStatus == .reconnecting || connectionStatus == .error
+        connectionStatus = status
+        if wasInterrupted, status == .connected {
+            showNotice("Соединение восстановлено")
+        }
     }
 
     private func startMicrophone() async throws {
@@ -186,69 +203,80 @@ final class AppStore: ObservableObject {
         case .transcriptUpdate(let text, _, let eventTerms):
             currentText = text
             terms = eventTerms
-            scheduleQuestionDetection()
             explanations.prefetch(terms: terms, context: currentText)
         case .termsUpdate(let items):
             terms = TermMerger.merge(terms, items)
             explanations.prefetch(terms: terms, context: currentText)
         case .error(let code):
             let messages: [String: String] = [
-                "INVALID_AUDIO_CHUNK": "Backend отклонил audio chunk: ожидается binary PCM 16 kHz mono int16",
-                "ASR_UNAVAILABLE": "Локальный Whisper выключен на backend. Выберите API-провайдера распознавания в настройках.",
-                "ASR_API_ERROR": "API-провайдер распознавания отклонил запрос: проверьте ключ и модель в настройках.",
-                "INVALID_CONFIG": "Backend не принял конфигурацию распознавания."
+                "INVALID_AUDIO_CHUNK": "Сервис не принял звук. Проверьте источник аудио в настройках.",
+                "ASR_UNAVAILABLE": "Распознавание речи недоступно. Откройте диагностику в настройках.",
+                "ASR_API_ERROR": "Сервис распознавания отклонил запрос. Проверьте подключение и настройки.",
+                "INVALID_CONFIG": "Сервис не принял настройки распознавания."
             ]
-            websocketError = messages[code] ?? "Backend WebSocket error: \(code)"
+            websocketError = messages[code] ?? "Ошибка сервиса распознавания: \(code)"
         }
     }
 
-    // MARK: - Question detection (settle-window port of useLiveQuestion)
+    // MARK: - Explicit answer requests
 
-    private func scheduleQuestionDetection() {
-        questionSettleTask?.cancel()
-        let text = currentText
-        let detected = QuestionDetector.latestQuestion(in: text)
-        let delayMs: UInt64 = detected?.hasSuffix("?") == true ? 350 : 1200
-        questionSettleTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
-            guard !Task.isCancelled, let self else { return }
-            if let question = QuestionDetector.latestQuestion(in: self.currentText) {
-                self.pushQuestion(question)
-            }
-        }
-    }
-
-    func pushQuestion(_ question: String) {
-        let key = QuestionDetector.questionKey(question)
-        guard !key.isEmpty else { return }
-        // Whisper re-decodes paraphrase the same question; the canonical key keeps
-        // one card per question instead of spawning duplicates.
-        if answeredQuestions.contains(where: { QuestionDetector.questionKey($0) == key }) {
+    /// Ctrl+Shift+Space: freeze the latest utterance and answer only because the
+    /// user explicitly asked. Transcript updates never call this path.
+    func answerNow() {
+        guard let excerpt = TranscriptExcerpt.latest(in: currentText) else {
+            showNotice("Пока недостаточно речи для ответа")
             return
         }
-        answeredQuestions = Array(([question] + answeredQuestions).prefix(8))
-        answers.ensureStream(question: question, deep: false, context: currentText)
+        requestAnswer(question: excerpt, fullContext: false)
     }
 
-    /// Ctrl+Shift+Space: force-answer the last spoken sentence(s).
-    func answerNow() {
-        if let forced = QuestionDetector.forcedQuestion(in: currentText) {
-            pushQuestion(forced)
-        }
-    }
-
-    /// Ctrl+Shift+Enter: answer the last sentence with the full transcript as context.
+    /// Ctrl+Shift+Enter: the same explicit action, with the full transcript.
     func fullContextAnswer() {
-        guard !currentText.isEmpty,
-              let question = QuestionDetector.lastSentence(in: currentText)
-        else { return }
-        fullContextRequested = true
-        pushQuestion(question)
+        guard let excerpt = TranscriptExcerpt.latest(in: currentText) else {
+            showNotice("Пока недостаточно речи для ответа")
+            return
+        }
+        requestAnswer(question: excerpt, fullContext: true)
     }
 
-    func popFullContext() -> Bool {
-        defer { fullContextRequested = false }
-        return fullContextRequested
+    @discardableResult
+    func requestAnswer(question: String, fullContext: Bool = false) -> Bool {
+        let frozen = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !frozen.isEmpty else {
+            showNotice("Введите текст запроса")
+            return false
+        }
+        guard backendReady, !backendUnavailable else {
+            showNotice("Сервис ответов сейчас недоступен")
+            return false
+        }
+        guard !answers.isGenerating else {
+            showNotice("Ответ уже готовится")
+            return false
+        }
+
+        answerRequests = Array(([frozen] + answerRequests.filter { $0 != frozen }).prefix(8))
+        let started = answers.ensureStream(
+            question: frozen,
+            deep: false,
+            context: currentText,
+            fullContext: fullContext
+        )
+        if !started, answers.state(question: frozen, deep: false).answer == nil {
+            answerRequests.removeAll { $0 == frozen }
+            return false
+        }
+        return true
+    }
+
+    func cancelAnswer() {
+        guard answers.cancelCurrent() else { return }
+        showNotice("Генерация остановлена")
+    }
+
+    func showNotice(_ message: String) {
+        transientNotice = message
+        AccessibilityAnnouncer.announce(message)
     }
 
     func recordAnswer(question: String, answer: LiveAnswer) {
@@ -257,6 +285,7 @@ final class AppStore: ObservableObject {
         } else {
             sessionAnswers.append(SessionAnswer(question: question, answer: answer))
         }
+        if mainTab != .session { sessionHasUnreadAnswer = true }
     }
 
     func addLastExplanation(term: String, explanation: TermExplanation) {
@@ -272,13 +301,19 @@ final class AppStore: ObservableObject {
         // meetingContext survives on purpose: it's filled before pressing "Слушать".
         currentText = ""
         terms = []
-        answeredQuestions = []
+        answerRequests = []
         sessionAnswers = []
         meetingStartedAt = .now
         audioLevel.level = 0
         websocketError = nil
         microphoneError = nil
+        transientNotice = nil
+        sessionHasUnreadAnswer = false
         answers.resetSession()
+        // Reset synchronously: cancelled answer tasks finish on a later turn of
+        // the main actor and must not keep explanation prefetch paused in the
+        // freshly started session.
+        answerStreamingCount = 0
     }
 
     private func buildMeetingRecord() -> MeetingRecord? {
@@ -307,11 +342,12 @@ final class AppStore: ObservableObject {
     /// Fills a session so the UI can be inspected with real content. Compiled
     /// out of release builds; the app never calls it.
     func seedForPreview(questions: [String], answer: LiveAnswer) {
-        answeredQuestions = questions
+        answerRequests = questions
         for question in questions {
             answers.seedForPreview(question: question, answer: answer)
         }
     }
+
     #endif
 
     // MARK: - Backend status polling (30s, like useBackendStatus)

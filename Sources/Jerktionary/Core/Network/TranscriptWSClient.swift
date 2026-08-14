@@ -62,10 +62,10 @@ final class TranscriptWSClient: NSObject, @unchecked Sendable {
                     if let event = BackendWsEvent.parse(Data(text.utf8)) {
                         self.onEvent?(event)
                     } else {
-                        self.onError?("Backend прислал неизвестное WebSocket событие")
+                        self.onError?("Сервис распознавания прислал неизвестное событие")
                     }
                 case .data:
-                    self.onError?("Backend прислал не-JSON WebSocket сообщение")
+                    self.onError?("Сервис распознавания прислал некорректное сообщение")
                 @unknown default:
                     break
                 }

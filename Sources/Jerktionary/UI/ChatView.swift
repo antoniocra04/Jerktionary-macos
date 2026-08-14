@@ -63,7 +63,7 @@ struct ChatView: View {
             }
 
             if conversations.isEmpty {
-                Text("Чатов пока нет. Нажмите ✎, чтобы начать.")
+                Text("Создайте новый чат.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,18 +93,18 @@ struct ChatView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 14) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(Theme.lavenderGradient)
             Text("Выберите чат или создайте новый")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            if !chatStore.capabilities.label.isEmpty {
-                Text("Провайдер: \(chatStore.capabilities.label)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            Button("Новый чат", systemImage: "square.and.pencil") {
+                chatStore.create()
             }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -138,6 +138,7 @@ private struct ConversationRow: View {
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Удалить", role: .destructive) {
@@ -188,8 +189,6 @@ struct ChatThreadView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header
-            Divider()
             thread
             composer
         }
@@ -243,57 +242,6 @@ struct ChatThreadView: View {
         }
     }
 
-    // MARK: Header — model and reasoning
-
-    private var header: some View {
-        ViewThatFits(in: .horizontal) {
-            fullHeader
-            compactHeader
-        }
-    }
-
-    private var fullHeader: some View {
-        HStack(spacing: 10) {
-            modelPicker(maxWidth: compact ? 190 : 260)
-
-            if !chatStore.capabilities.reasoningLevels.isEmpty {
-                reasoningPicker
-            }
-
-            Spacer()
-            streamAction
-        }
-        .foregroundStyle(.secondary)
-    }
-
-    private var compactHeader: some View {
-        HStack(spacing: 8) {
-            modelPicker(maxWidth: 190)
-            Spacer(minLength: 0)
-            if chatStore.isStreaming, chatStore.streamingConversationID == conversationID {
-                streamAction
-            } else {
-                Menu {
-                    if !chatStore.capabilities.reasoningLevels.isEmpty {
-                        reasoningPicker
-                    }
-                    if conversation?.messages.isEmpty == false {
-                        Button("Перегенерировать", systemImage: "arrow.counterclockwise") {
-                            regenerate()
-                        }
-                    }
-                } label: {
-                    Label("Параметры чата", systemImage: "ellipsis.circle")
-                }
-                .labelStyle(.iconOnly)
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Параметры чата")
-            }
-        }
-        .foregroundStyle(.secondary)
-    }
-
     private func modelPicker(maxWidth: CGFloat) -> some View {
         Picker("Модель", selection: modelBinding) {
             Text(defaultModelLabel).tag("")
@@ -303,38 +251,22 @@ struct ChatThreadView: View {
         }
         .labelsHidden()
         .frame(minWidth: 120, maxWidth: maxWidth)
-        .controlSize(compact ? .small : .regular)
-        .help("Модель. Список задаётся в настройках.")
+        .controlSize(.small)
+        .help("Выбрать модель")
+        .accessibilityLabel("Модель")
     }
 
     private var reasoningPicker: some View {
-        Picker("Мощность ризонинга", selection: reasoningBinding) {
-            Text("Ризонинг: по умолчанию").tag("")
+        Picker("Глубина рассуждения", selection: reasoningBinding) {
+            Text("Глубина: по умолчанию").tag("")
             ForEach(chatStore.capabilities.reasoningLevels, id: \.self) { level in
                 Text(Self.reasoningLabel(level)).tag(level)
             }
         }
         .labelsHidden()
         .fixedSize()
-        .controlSize(compact ? .small : .regular)
-        .help("Мощность ризонинга")
-    }
-
-    @ViewBuilder
-    private var streamAction: some View {
-        if chatStore.isStreaming, chatStore.streamingConversationID == conversationID {
-            Button("Стоп", systemImage: "stop.fill") {
-                chatStore.cancelStreaming()
-            }
-            .buttonStyle(.borderless)
-            .font(.caption)
-        } else if conversation?.messages.isEmpty == false {
-            Button("Перегенерировать", systemImage: "arrow.counterclockwise") {
-                regenerate()
-            }
-            .buttonStyle(.borderless)
-            .font(.caption)
-        }
+        .controlSize(.small)
+        .help("Глубина рассуждения")
     }
 
     private func regenerate() {
@@ -355,7 +287,7 @@ struct ChatThreadView: View {
 
     private var defaultModelLabel: String {
         let model = chatStore.capabilities.defaultModel
-        return model.isEmpty ? "Модель backend" : "По умолчанию (\(model))"
+        return model.isEmpty ? "Модель по умолчанию" : "По умолчанию (\(model))"
     }
 
     private var modelBinding: Binding<String> {
@@ -374,16 +306,16 @@ struct ChatThreadView: View {
 
     private static func reasoningLabel(_ level: String) -> String {
         switch level {
-        case "none": "Ризонинг: выкл"
-        case "minimal": "Ризонинг: минимум"
-        case "low": "Ризонинг: низкий"
-        case "medium": "Ризонинг: средний"
-        case "high": "Ризонинг: высокий"
+        case "none": "Глубина: выкл"
+        case "minimal": "Глубина: минимум"
+        case "low": "Глубина: низкая"
+        case "medium": "Глубина: средняя"
+        case "high": "Глубина: высокая"
         // makora's own vocabulary: "max" above high, and gemma exposes a plain
         // on/off pair instead of a scale.
-        case "max": "Ризонинг: максимум"
-        case "enabled": "Ризонинг: вкл"
-        default: "Ризонинг: \(level)"
+        case "max": "Глубина: максимум"
+        case "enabled": "Глубина: вкл"
+        default: "Глубина: \(level)"
         }
     }
 
@@ -443,7 +375,7 @@ struct ChatThreadView: View {
                     }
                 }
 
-                composerInputRow
+                composerInput
             }
             .padding(compact ? 8 : 10)
             .background(
@@ -457,32 +389,16 @@ struct ChatThreadView: View {
                 return true
             }
 
-            if !compact {
-                Text(chatStore.capabilities.ready
-                     ? "Enter — отправить, Shift+Enter — перенос строки"
-                     : "LLM на backend недоступна — проверьте статус в настройках")
+            if !compact, !chatStore.capabilities.ready {
+                Text("Сервис чата недоступен — проверьте подключение в настройках")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
     }
 
-    private var composerInputRow: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Button {
-                pickImages()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 30, height: 30)
-                    .background(Theme.card.opacity(0.78), in: Circle())
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Прикрепить изображение")
-            .accessibilityLabel("Прикрепить изображение")
-
+    private var composerInput: some View {
+        VStack(alignment: .leading, spacing: compact ? 5 : 7) {
             ChatComposerTextView(
                 documentID: conversationID,
                 onEdit: { text in
@@ -497,29 +413,138 @@ struct ChatThreadView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: composerHeight)
 
-            Button {
-                submit()
-            } label: {
-                Group {
-                    if submitting {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-                }
-                .frame(width: 30, height: 30)
-                .foregroundStyle(canSubmit ? Color.white : Color.secondary)
-                .background(canSubmit ? Theme.tint : Theme.card.opacity(0.78), in: Circle())
-                .contentShape(Circle())
+            ViewThatFits(in: .horizontal) {
+                fullComposerControls
+                compactComposerControls
             }
-            .buttonStyle(.plain)
-            .disabled(!canSubmit)
-            .help("Отправить (Enter)")
-            .accessibilityLabel("Отправить")
         }
+    }
+
+    private var fullComposerControls: some View {
+        HStack(alignment: .center, spacing: 7) {
+            attachmentButton
+            modelPicker(maxWidth: compact ? 160 : 220)
+
+            if !chatStore.capabilities.reasoningLevels.isEmpty {
+                reasoningPicker
+            }
+
+            Spacer(minLength: 4)
+
+            if !chatStore.isStreaming, conversation?.messages.isEmpty == false {
+                regenerateButton
+            }
+            primaryComposerButton
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    private var compactComposerControls: some View {
+        HStack(alignment: .center, spacing: 7) {
+            attachmentButton
+            modelPicker(maxWidth: 150)
+            Spacer(minLength: 0)
+
+            if !chatStore.capabilities.reasoningLevels.isEmpty
+                || (!chatStore.isStreaming && conversation?.messages.isEmpty == false) {
+                Menu {
+                    if !chatStore.capabilities.reasoningLevels.isEmpty {
+                        Picker("Глубина рассуждения", selection: reasoningBinding) {
+                            Text("По умолчанию").tag("")
+                            ForEach(chatStore.capabilities.reasoningLevels, id: \.self) { level in
+                                Text(Self.reasoningLabel(level)).tag(level)
+                            }
+                        }
+                    }
+                    if !chatStore.isStreaming, conversation?.messages.isEmpty == false {
+                        Divider()
+                        Button("Перегенерировать", systemImage: "arrow.counterclockwise") {
+                            regenerate()
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(width: 30, height: 30)
+                        .contentShape(Circle())
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Параметры ответа")
+                .accessibilityLabel("Параметры ответа")
+            }
+
+            primaryComposerButton
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    private var attachmentButton: some View {
+        Button {
+            pickImages()
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .background(Theme.card.opacity(0.78), in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help("Прикрепить изображение")
+        .accessibilityLabel("Прикрепить изображение")
+    }
+
+    private var regenerateButton: some View {
+        Button {
+            regenerate()
+        } label: {
+            Image(systemName: "arrow.counterclockwise")
+                .frame(width: 30, height: 30)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Перегенерировать последний ответ")
+        .accessibilityLabel("Перегенерировать последний ответ")
+    }
+
+    private var primaryComposerButton: some View {
+        Button {
+            if chatStore.isStreaming {
+                chatStore.cancelStreaming()
+            } else {
+                submit()
+            }
+        } label: {
+            Group {
+                if chatStore.isStreaming {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 11, weight: .bold))
+                } else if submitting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 13, weight: .bold))
+                }
+            }
+            .frame(width: 30, height: 30)
+            .foregroundStyle(primaryActionHighlighted ? Color.white : Color.secondary)
+            .background(primaryActionHighlighted ? Theme.tint : Theme.card.opacity(0.78), in: Circle())
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!primaryActionAvailable)
+        .help(chatStore.isStreaming ? "Остановить ответ" : "Отправить (Enter)")
+        .accessibilityLabel(chatStore.isStreaming ? "Остановить ответ" : "Отправить")
+    }
+
+    private var primaryActionAvailable: Bool {
+        chatStore.isStreaming || canSubmit
+    }
+
+    private var primaryActionHighlighted: Bool {
+        chatStore.isStreaming || submitting || canSubmit
     }
 
     private var composerHeight: CGFloat {
@@ -668,10 +693,6 @@ private struct MessageBubble: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(message.role == .user ? "Вы" : "Ассистент")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(message.role == .user ? Color.secondary : Theme.tint)
-
             if !message.attachments.isEmpty {
                 AttachmentStrip(attachments: message.attachments, onRemove: nil)
             }
@@ -694,12 +715,18 @@ private struct MessageBubble: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(message.role == .user ? 12 : 0)
+        .frame(maxWidth: message.role == .user ? 560 : .infinity, alignment: .leading)
         .background(
             message.role == .user ? Theme.tint.opacity(0.07) : Color.clear,
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
+        .frame(
+            maxWidth: .infinity,
+            alignment: message.role == .user ? .trailing : .leading
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(message.role == .user ? "Ваше сообщение" : "Ответ ассистента")
     }
 }
 
@@ -712,18 +739,24 @@ private struct StreamingBubble: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("Ассистент")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.tint)
-                ProgressView().controlSize(.small)
+            if !text.isEmpty {
+                Text(text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text(text)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Готовлю ответ…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Ассистент готовит ответ")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Ответ ассистента")
     }
 }
 

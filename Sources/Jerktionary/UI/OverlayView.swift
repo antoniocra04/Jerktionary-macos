@@ -16,16 +16,17 @@ struct OverlayView: View {
     @EnvironmentObject private var chats: ChatStore
     @EnvironmentObject private var answers: AnswerStreamManager
 
-    /// The question on screen. Held so a newly detected question cannot replace
+    /// The request on screen. Held so a newly requested answer cannot replace
     /// the answer being read aloud mid-sentence.
     @State private var pinned: String?
     /// Newest question already seen on the answer pane, so the tab can show that
     /// something arrived while another pane was open.
     @State private var seen: String?
+    @State private var transcriptExpanded = false
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    private var questions: [String] { store.answeredQuestions }
+    private var questions: [String] { store.answerRequests }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,9 +51,15 @@ struct OverlayView: View {
             followOrPin(previous: previous, current: current)
         }
         .onChange(of: settings.overlayPane) {
-            if settings.overlayPane == .answer { seen = questions.first }
+            if settings.overlayPane == .live { seen = questions.first }
         }
         .onAppear { seen = questions.first }
+        .overlay(alignment: .bottom) {
+            if let notice = store.transientNotice {
+                TransientNoticeView(message: notice)
+                    .padding(10)
+            }
+        }
     }
 
     /// Transparency lives in the background, never in the text. Fading the whole
@@ -91,8 +98,8 @@ struct OverlayView: View {
             OverlayIconButton(
                 systemImage: store.contentProtectionEnabled ? "eye.slash" : "eye",
                 label: store.contentProtectionEnabled
-                    ? "Скрыто от захвата экрана"
-                    : "Видно при захвате экрана — нажмите, чтобы скрыть",
+                    ? "Сейчас скрыто от захвата — нажмите, чтобы показывать"
+                    : "Сейчас видно при захвате — нажмите, чтобы скрыть",
                 tint: store.contentProtectionEnabled ? .secondary : .orange
             ) {
                 store.contentProtectionEnabled.toggle()
@@ -128,8 +135,8 @@ struct OverlayView: View {
             Spacer(minLength: 0)
             Menu {
                 Picker("Прозрачность фона", selection: $settings.overlayOpacity) {
-                    Text("35%").tag(0.35)
                     Text("70%").tag(0.70)
+                    Text("85%").tag(0.85)
                     Text("100%").tag(1.0)
                 }
                 Divider()
@@ -164,10 +171,10 @@ struct OverlayView: View {
 
     /// Which tab should show that something arrived behind the user's back.
     private var badgedPane: OverlayPane? {
-        guard settings.overlayPane != .answer,
-              let newest = questions.first, newest != seen
-        else { return nil }
-        return .answer
+        guard settings.overlayPane != .live else { return nil }
+        if answers.isGenerating { return .live }
+        guard let newest = questions.first, newest != seen else { return nil }
+        return .live
     }
 
     private func faultStrip(_ fault: String) -> some View {
@@ -195,12 +202,10 @@ struct OverlayView: View {
     @ViewBuilder
     private var pane: some View {
         switch settings.overlayPane {
-        case .answer:
-            answerPane
+        case .live:
+            livePane
         case .chat:
             chatPane
-        case .transcript:
-            transcriptPane
         }
     }
 
@@ -218,9 +223,13 @@ struct OverlayView: View {
     }
 
     @ViewBuilder
-    private var answerPane: some View {
-        if let shown {
-            VStack(alignment: .leading, spacing: 0) {
+    private var livePane: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            AnswerRequestBar(compact: true)
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+
+            if let shown {
                 ScrollView {
                     AnswerCardView(question: shown, compact: true)
                         // Without this the card keeps its @State across a change
@@ -237,14 +246,16 @@ struct OverlayView: View {
                 if questions.count > 1 {
                     answerPager
                 }
+            } else {
+                hint(
+                    store.isListening
+                        ? "Нажмите «Ответить», когда понадобится подсказка"
+                        : "Начните прослушивание, чтобы подготовить ответ",
+                    icon: "sparkles"
+                )
             }
-        } else {
-            hint(
-                store.isListening
-                    ? "Слушаю. Ответ появится, когда прозвучит вопрос"
-                    : "Ctrl+Shift+Space — ответить сейчас, Ctrl+Shift+O — свернуть",
-                icon: "sparkles"
-            )
+
+            transcriptDisclosure
         }
     }
 
@@ -263,7 +274,7 @@ struct OverlayView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.tint)
             } else {
-                Text("последний вопрос")
+                Text("Последний ответ")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -275,13 +286,13 @@ struct OverlayView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
 
-            OverlayIconButton(systemImage: "chevron.left", label: "Более старый вопрос") {
+            OverlayIconButton(systemImage: "chevron.left", label: "Более старый ответ") {
                 move(+1)
             }
             .disabled(shownIndex >= questions.count - 1)
             .keyboardShortcut(.leftArrow, modifiers: [])
 
-            OverlayIconButton(systemImage: "chevron.right", label: "Более новый вопрос") {
+            OverlayIconButton(systemImage: "chevron.right", label: "Более новый ответ") {
                 move(-1)
             }
             .disabled(shownIndex <= 0)
@@ -307,7 +318,7 @@ struct OverlayView: View {
         if pinned == nil, answers.state(question: previous, deep: false).answer != nil {
             pinned = previous
         }
-        if settings.overlayPane == .answer, pinned == nil {
+        if settings.overlayPane == .live, pinned == nil {
             seen = current
         }
     }
@@ -392,26 +403,29 @@ struct OverlayView: View {
         return conversation.displayTitle
     }
 
-    @ViewBuilder
-    private var transcriptPane: some View {
-        if store.currentText.isEmpty {
-            hint(
-                store.isListening
-                    ? "Слушаю. Расшифровка появится здесь"
-                    : "Распознавание выключено",
-                icon: "waveform"
-            )
-        } else {
-            TranscriptTextView(
-                text: store.currentText,
-                terms: store.terms,
-                onTermTap: { _ in }
-            )
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: 680)
-            .frame(maxWidth: .infinity)
+    private var transcriptDisclosure: some View {
+        DisclosureGroup("Транскрипт", isExpanded: $transcriptExpanded) {
+            Group {
+                if store.currentText.isEmpty {
+                    Text(store.isListening ? "Расшифровка появится здесь" : "Прослушивание выключено")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    TranscriptTextView(
+                        text: store.currentText,
+                        terms: store.terms,
+                        onTermTap: { _ in }
+                    )
+                    .frame(height: 120)
+                }
+            }
+            .padding(.top, 6)
         }
+        .font(.caption.weight(.medium))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.primary.opacity(0.04))
     }
 
     private func hint(_ text: String, icon: String) -> some View {
@@ -439,7 +453,7 @@ struct OverlayView: View {
 
 // MARK: - Pieces
 
-/// Three text tabs rather than a segmented Picker: a Picker cannot carry the
+/// Two text tabs rather than a segmented Picker: a Picker cannot carry the
 /// badge that says an answer landed on a pane the user can't see, and it refuses
 /// to compress below 227pt — 63% of the card at its minimum width.
 private struct PaneTabs: View {

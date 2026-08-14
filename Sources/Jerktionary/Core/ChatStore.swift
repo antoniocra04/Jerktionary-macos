@@ -427,7 +427,7 @@ final class ChatStore: ObservableObject {
         if let backend = error as? BackendError {
             switch backend.code {
             case "LLM_UNAVAILABLE":
-                return "LLM недоступна. Проверьте, что backend запущен с рабочим провайдером."
+                return "Сервис чата недоступен. Проверьте подключение в настройках."
             case "LLM_BAD_RESPONSE":
                 // The backend forwards the provider's own words — "model X is not
                 // multimodal" is actionable in a way a generic message is not.

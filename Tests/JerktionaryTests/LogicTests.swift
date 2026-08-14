@@ -2,39 +2,21 @@ import AppKit
 import XCTest
 @testable import Jerktionary
 
-final class QuestionDetectorTests: XCTestCase {
-    func testLatestQuestionFindsLastQuestionMark() {
-        let text = "Привет. Что такое замыкание? Понятно. А как работает event loop?"
-        XCTAssertEqual(QuestionDetector.latestQuestion(in: text), "А как работает event loop?")
-    }
-
-    func testLatestQuestionInterrogativeWithoutMark() {
-        let text = "Хорошо. Расскажи про хуки в реакте."
-        XCTAssertEqual(QuestionDetector.latestQuestion(in: text), "Расскажи про хуки в реакте")
-    }
-
-    func testLatestQuestionNilForPlainStatement() {
-        XCTAssertNil(QuestionDetector.latestQuestion(in: "Сегодня хорошая погода."))
-    }
-
-    func testForcedQuestionTakesLastTwoSentences() {
+final class TranscriptExcerptTests: XCTestCase {
+    func testLatestTakesLastTwoSentencesWithoutDetectingIntent() {
         let text = "Первое. Второе. Третье."
-        XCTAssertEqual(QuestionDetector.forcedQuestion(in: text), "Второе. Третье")
+        XCTAssertEqual(TranscriptExcerpt.latest(in: text), "Второе. Третье")
     }
 
-    func testQuestionKeyStripsFillerAndPunctuation() {
-        let a = QuestionDetector.questionKey("Что такое REST?")
-        let b = QuestionDetector.questionKey("А что такое REST")
-        let c = QuestionDetector.questionKey("Ну а что такое  REST?!")
-        XCTAssertEqual(a, b)
-        XCTAssertEqual(b, c)
-    }
-
-    func testLastSentence() {
+    func testLatestAcceptsAStatement() {
         XCTAssertEqual(
-            QuestionDetector.lastSentence(in: "Одно. Другое дело…"),
-            "Другое дело"
+            TranscriptExcerpt.latest(in: "Сегодня хорошая погода."),
+            "Сегодня хорошая погода"
         )
+    }
+
+    func testLatestIsNilForWhitespace() {
+        XCTAssertNil(TranscriptExcerpt.latest(in: "   \n"))
     }
 }
 
