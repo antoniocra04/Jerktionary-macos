@@ -45,7 +45,7 @@ struct NotesView: View {
     private var noteList: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Заметки")
+                Text("Notes")
                     .font(.headline)
                 Spacer()
                 Button {
@@ -56,12 +56,12 @@ struct NotesView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.tint)
-                .help("Новая заметка")
-                .accessibilityLabel("Новая заметка")
+                .help("New note")
+                .accessibilityLabel("New note")
             }
 
             if notes.isEmpty {
-                Text("Создайте первую заметку.")
+                Text("Create your first note.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -96,10 +96,10 @@ struct NotesView: View {
             Image(systemName: "note.text")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(Theme.lavenderGradient)
-            Text("Выберите заметку или создайте новую")
+            Text("Pick a note or create a new one")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Button("Новая заметка", systemImage: "square.and.pencil") {
+            Button("New note", systemImage: "square.and.pencil") {
                 let note = notesStore.create()
                 selectedID = note.id
             }
@@ -142,15 +142,15 @@ private struct NoteRow: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Удалить", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 confirmingDelete = true
             }
         }
-        .alert("Удалить заметку?", isPresented: $confirmingDelete) {
-            Button("Удалить", role: .destructive, action: onDelete)
-            Button("Отмена", role: .cancel) {}
+        .alert("Delete this note?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Текст заметки нельзя будет восстановить.")
+            Text("The note's text cannot be recovered.")
         }
     }
 }
@@ -210,18 +210,18 @@ private struct NoteEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                TextField("Заголовок", text: titleBinding)
+                TextField("Title", text: titleBinding)
                     .textFieldStyle(.plain)
                     .font(.title2.weight(.bold))
 
-                Picker("Режим заметки", selection: $preview) {
-                    Label("Редактирование", systemImage: "pencil").tag(false)
-                    Label("Просмотр", systemImage: "eye").tag(true)
+                Picker("Note mode", selection: $preview) {
+                    Label("Editing", systemImage: "pencil").tag(false)
+                    Label("Preview", systemImage: "eye").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help(preview ? "Редактировать" : "Просмотр Markdown")
+                .help(preview ? "Edit" : "Preview Markdown")
             }
 
             Divider()
@@ -230,7 +230,7 @@ private struct NoteEditor: View {
                 ScrollView {
                     Group {
                         if draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Заметка пока пустая.")
+                            Text("This note is empty.")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -257,7 +257,7 @@ private struct NoteEditor: View {
 
             HStack {
                 Spacer()
-                Text("Изменено \(NotesStore.formatDate(note?.updatedAt ?? 0))")
+                Text("Edited \(NotesStore.formatDate(note?.updatedAt ?? 0))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

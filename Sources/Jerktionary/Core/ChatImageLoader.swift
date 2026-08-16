@@ -35,7 +35,7 @@ enum ChatImageLoader {
               let attachment = attachment(from: image, name: url.lastPathComponent)
         else {
             throw BackendError(
-                message: "Не удалось прочитать изображение \(url.lastPathComponent)",
+                message: "Could not read the image \(url.lastPathComponent)",
                 status: 0
             )
         }

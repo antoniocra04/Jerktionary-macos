@@ -160,7 +160,7 @@ struct MainView: View {
     private var sessionError: String? {
         if let error = store.microphoneError ?? store.websocketError { return error }
         if backendIsUnavailable {
-            return "Связь с сервисом ответов потеряна. Уже полученные данные доступны; новые ответы временно недоступны."
+            return "The connection to the answer service was lost. What you already have stays available; new answers are paused."
         }
         return nil
     }
@@ -178,19 +178,19 @@ struct MainToolbar: ToolbarContent {
                     store.sidebarVisible.toggle()
                 } label: {
                     Label(
-                        store.sidebarVisible ? "Скрыть историю встреч" : "Показать историю встреч",
+                        store.sidebarVisible ? "Hide meeting history" : "Show meeting history",
                         systemImage: "sidebar.left"
                     )
                 }
-                .help(store.sidebarVisible ? "Скрыть историю встреч" : "Показать историю встреч")
+                .help(store.sidebarVisible ? "Hide meeting history" : "Show meeting history")
             }
         }
 
         ToolbarItem(placement: .principal) {
-            Picker("Раздел", selection: $store.mainTab) {
+            Picker("Section", selection: $store.mainTab) {
                 Text(sessionTitle).tag(MainTab.session)
-                Text("Заметки").tag(MainTab.notes)
-                Text("Чат").tag(MainTab.chat)
+                Text("Notes").tag(MainTab.notes)
+                Text("Chat").tag(MainTab.chat)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -206,11 +206,11 @@ struct MainToolbar: ToolbarContent {
                 store.toggleOverlay()
             } label: {
                 Label(
-                    "Компактный режим поверх всех окон",
+                    "Compact mode above all windows",
                     systemImage: "rectangle.bottomthird.inset.filled"
                 )
             }
-            .help("Компактный режим поверх всех окон (Ctrl+Shift+O)")
+            .help("Compact mode above all windows (Ctrl+Shift+O)")
 
             Button {
                 store.contentProtectionEnabled.toggle()
@@ -218,23 +218,23 @@ struct MainToolbar: ToolbarContent {
             } label: {
                 Label(
                     store.contentProtectionEnabled
-                        ? "Показывать при захвате экрана"
-                        : "Скрыть при захвате экрана",
+                        ? "Show during screen capture"
+                        : "Hide during screen capture",
                     systemImage: store.contentProtectionEnabled ? "eye.slash" : "eye"
                 )
             }
             .help(store.contentProtectionEnabled
-                  ? "Сейчас окно скрыто от захвата. Нажмите, чтобы показывать"
-                  : "Сейчас окно видно при захвате. Нажмите, чтобы скрыть")
+                  ? "The window is hidden from screen capture. Click to show it"
+                  : "The window is visible in screen capture. Click to hide it")
 
             ListenButton()
         }
     }
 
     private var sessionTitle: String {
-        if store.answerStreamingCount > 0 { return "Сессия ◌" }
-        if store.sessionHasUnreadAnswer { return "Сессия •" }
-        return "Сессия"
+        if store.answerStreamingCount > 0 { return "Session ◌" }
+        if store.sessionHasUnreadAnswer { return "Session •" }
+        return "Session"
     }
 }
 
@@ -245,9 +245,9 @@ struct EmptySessionView: View {
             Image(systemName: "waveform")
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(Theme.lavenderGradient)
-            Text("Готов к разговору")
+            Text("Ready to talk")
                 .font(.title2.weight(.bold))
-            Text("Начните прослушивание, когда звонок будет готов.")
+            Text("Start listening once the call is ready.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -273,8 +273,8 @@ struct TransientNoticeView: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
-            .help("Закрыть")
-            .accessibilityLabel("Закрыть уведомление")
+            .help("Close")
+            .accessibilityLabel("Dismiss the notification")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -324,23 +324,23 @@ struct BackendUnavailableView: View {
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(Theme.lavenderGradient)
             Text(store.backendUnavailable
-                 ? "Нет связи с сервисом ответов"
-                 : "Сервис ответов ещё не готов")
+                 ? "No connection to the answer service"
+                 : "The answer service is not ready yet")
                 .font(.title2.weight(.bold))
-            Text("Проверьте подключение в настройках.")
+            Text("Check the connection in Settings.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 380)
             HStack(spacing: 10) {
-                Button("Повторить") {
+                Button("Retry") {
                     Task { await store.refreshBackendStatus() }
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.capsule)
                 SettingsLink {
-                    Text("Открыть настройки")
+                    Text("Open Settings")
                 }
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)

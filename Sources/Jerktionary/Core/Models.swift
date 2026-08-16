@@ -90,13 +90,13 @@ private struct FailableTerm: Decodable {
 enum WsConnectionStatus: String {
     case disconnected, connecting, connected, reconnecting, error
 
-    var russianLabel: String {
+    var label: String {
         switch self {
-        case .disconnected: "отключено"
-        case .connecting: "подключение"
-        case .connected: "в эфире"
-        case .reconnecting: "переподключение"
-        case .error: "ошибка"
+        case .disconnected: "offline"
+        case .connecting: "connecting"
+        case .connected: "live"
+        case .reconnecting: "reconnecting"
+        case .error: "error"
         }
     }
 }

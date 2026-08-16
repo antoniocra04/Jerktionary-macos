@@ -24,13 +24,13 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         } catch {
             throw BackendError(
-                message: "Нет доступа к записи экрана (нужен для системного звука). " +
-                    "Разрешите в System Settings → Privacy & Security → Screen & System Audio Recording и перезапустите приложение.",
+                message: "No screen recording access (required for system audio). " +
+                    "Allow it in System Settings → Privacy & Security → Screen & System Audio Recording, then restart the app.",
                 status: 0
             )
         }
         guard let display = content.displays.first else {
-            throw BackendError(message: "Не найден дисплей для захвата системного звука.", status: 0)
+            throw BackendError(message: "No display found for system audio capture.", status: 0)
         }
 
         let filter = SCContentFilter(display: display, excludingWindows: [])
@@ -77,7 +77,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     // MARK: SCStreamDelegate
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        onStopError?("Захват системного звука остановлен: \(error.localizedDescription)")
+        onStopError?("System audio capture stopped: \(error.localizedDescription)")
     }
 
     /// Deinterleaves/averages the CMSampleBuffer audio into mono floats.

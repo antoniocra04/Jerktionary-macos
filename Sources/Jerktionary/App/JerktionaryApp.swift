@@ -38,43 +38,43 @@ struct JerktionaryApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
-            CommandMenu("Навигация") {
-                Button(store.sidebarVisible ? "Скрыть историю встреч" : "Показать историю встреч") {
+            CommandMenu("Navigation") {
+                Button(store.sidebarVisible ? "Hide meeting history" : "Show meeting history") {
                     store.sidebarVisible.toggle()
                 }
                 .disabled(store.mainTab != .session)
                 Divider()
-                Button("Сессия") { store.mainTab = .session }
+                Button("Session") { store.mainTab = .session }
                     .keyboardShortcut("1", modifiers: .command)
-                Button("Заметки") { store.mainTab = .notes }
+                Button("Notes") { store.mainTab = .notes }
                     .keyboardShortcut("2", modifiers: .command)
-                Button("Чат") { store.mainTab = .chat }
+                Button("Chat") { store.mainTab = .chat }
                     .keyboardShortcut("3", modifiers: .command)
             }
-            CommandMenu("Сессия") {
-                Button("Ответить сейчас — Ctrl+Shift+Space") {
+            CommandMenu("Session") {
+                Button("Answer now — Ctrl+Shift+Space") {
                     store.answerNow()
                 }
                 .disabled(store.currentText.isEmpty || store.answers.isGenerating)
-                Button("Ответить с полным контекстом — Ctrl+Shift+Enter") {
+                Button("Answer with full context — Ctrl+Shift+Enter") {
                     store.fullContextAnswer()
                 }
                 .disabled(store.currentText.isEmpty || store.answers.isGenerating)
                 if store.answers.isGenerating {
-                    Button("Остановить ответ") { store.cancelAnswer() }
+                    Button("Stop the answer") { store.cancelAnswer() }
                 }
                 Divider()
-                Button(store.isListening ? "Остановить прослушивание" : "Начать прослушивание") {
+                Button(store.isListening ? "Stop listening" : "Start listening") {
                     Task { await store.toggleListening() }
                 }
                 .disabled(!store.isListening && (!store.backendReady || store.backendUnavailable))
                 Divider()
-                Button("Компактный режим") {
+                Button("Compact mode") {
                     store.toggleOverlay()
                 }
                 Button(store.contentProtectionEnabled
-                       ? "Показывать при захвате экрана"
-                       : "Скрыть при захвате экрана") {
+                       ? "Show during screen capture"
+                       : "Hide during screen capture") {
                     store.contentProtectionEnabled.toggle()
                     WindowController.setContentProtection(store.contentProtectionEnabled)
                 }
@@ -116,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .screenshotToChat: { [weak store] in store?.captureScreenshotToChat() }
         ])
         if !failed.isEmpty {
-            store.showNotice("Некоторые глобальные сочетания клавиш недоступны")
+            store.showNotice("Some global shortcuts are unavailable")
         }
 
         // Stealth by default, like the Electron app.

@@ -73,14 +73,14 @@ struct Conversation: Codable, Identifiable, Hashable, Sendable {
         if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return String(title.prefix(Note.titleLengthLimit))
         }
-        guard let first = messages.first(where: { $0.role == .user }) else { return "Новый чат" }
+        guard let first = messages.first(where: { $0.role == .user }) else { return "New chat" }
         let head = first.text
             .prefix(Note.titleScanLimit)
             .split(separator: "\n", omittingEmptySubsequences: true)
             .first
             .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
         if head.isEmpty {
-            return first.attachments.isEmpty ? "Новый чат" : "Изображение"
+            return first.attachments.isEmpty ? "New chat" : "Image"
         }
         return String(head.prefix(Note.titleLengthLimit))
     }
@@ -427,7 +427,7 @@ final class ChatStore: ObservableObject {
         if let backend = error as? BackendError {
             switch backend.code {
             case "LLM_UNAVAILABLE":
-                return "Сервис чата недоступен. Проверьте подключение в настройках."
+                return "The chat service is unavailable. Check the connection in Settings."
             case "LLM_BAD_RESPONSE":
                 // The backend forwards the provider's own words — "model X is not
                 // multimodal" is actionable in a way a generic message is not.

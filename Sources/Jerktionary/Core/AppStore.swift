@@ -108,7 +108,7 @@ final class AppStore: ObservableObject {
             case .system:
                 try await startSystemAudio()
             }
-            showNotice("Прослушивание начато")
+            showNotice("Listening started")
         } catch {
             wsClient?.disconnect()
             wsClient = nil
@@ -132,15 +132,15 @@ final class AppStore: ObservableObject {
         // Archive the finished meeting; failures must not break stopping.
         if let record = buildMeetingRecord() {
             meetings.save(record)
-            showNotice("Встреча сохранена")
+            showNotice("Meeting saved")
         } else {
-            showNotice("Прослушивание остановлено")
+            showNotice("Listening stopped")
         }
     }
 
     private func connectWebSocket() {
         guard let url = settings.websocketUrl else {
-            websocketError = "Некорректный адрес сервиса ответов"
+            websocketError = "Invalid answer service address"
             return
         }
         wsClient?.disconnect()
@@ -162,7 +162,7 @@ final class AppStore: ObservableObject {
         let wasInterrupted = connectionStatus == .reconnecting || connectionStatus == .error
         connectionStatus = status
         if wasInterrupted, status == .connected {
-            showNotice("Соединение восстановлено")
+            showNotice("Connection restored")
         }
     }
 
@@ -209,12 +209,12 @@ final class AppStore: ObservableObject {
             explanations.prefetch(terms: terms, context: currentText)
         case .error(let code):
             let messages: [String: String] = [
-                "INVALID_AUDIO_CHUNK": "Сервис не принял звук. Проверьте источник аудио в настройках.",
-                "ASR_UNAVAILABLE": "Распознавание речи недоступно. Откройте диагностику в настройках.",
-                "ASR_API_ERROR": "Сервис распознавания отклонил запрос. Проверьте подключение и настройки.",
-                "INVALID_CONFIG": "Сервис не принял настройки распознавания."
+                "INVALID_AUDIO_CHUNK": "The service rejected the audio. Check the audio source in Settings.",
+                "ASR_UNAVAILABLE": "Speech recognition is unavailable. Open diagnostics in Settings.",
+                "ASR_API_ERROR": "The recognition service rejected the request. Check the connection and settings.",
+                "INVALID_CONFIG": "The service rejected the recognition settings."
             ]
-            websocketError = messages[code] ?? "Ошибка сервиса распознавания: \(code)"
+            websocketError = messages[code] ?? "Recognition service error: \(code)"
         }
     }
 
@@ -224,7 +224,7 @@ final class AppStore: ObservableObject {
     /// user explicitly asked. Transcript updates never call this path.
     func answerNow() {
         guard let excerpt = TranscriptExcerpt.latest(in: currentText) else {
-            showNotice("Пока недостаточно речи для ответа")
+            showNotice("Not enough speech yet to answer")
             return
         }
         requestAnswer(question: excerpt, fullContext: false)
@@ -233,7 +233,7 @@ final class AppStore: ObservableObject {
     /// Ctrl+Shift+Enter: the same explicit action, with the full transcript.
     func fullContextAnswer() {
         guard let excerpt = TranscriptExcerpt.latest(in: currentText) else {
-            showNotice("Пока недостаточно речи для ответа")
+            showNotice("Not enough speech yet to answer")
             return
         }
         requestAnswer(question: excerpt, fullContext: true)
@@ -243,15 +243,15 @@ final class AppStore: ObservableObject {
     func requestAnswer(question: String, fullContext: Bool = false) -> Bool {
         let frozen = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !frozen.isEmpty else {
-            showNotice("Введите текст запроса")
+            showNotice("Type your request")
             return false
         }
         guard backendReady, !backendUnavailable else {
-            showNotice("Сервис ответов сейчас недоступен")
+            showNotice("The answer service is unavailable right now")
             return false
         }
         guard !answers.isGenerating else {
-            showNotice("Ответ уже готовится")
+            showNotice("An answer is already being prepared")
             return false
         }
 
@@ -271,7 +271,7 @@ final class AppStore: ObservableObject {
 
     func cancelAnswer() {
         guard answers.cancelCurrent() else { return }
-        showNotice("Генерация остановлена")
+        showNotice("Generation stopped")
     }
 
     func showNotice(_ message: String) {
@@ -298,7 +298,7 @@ final class AppStore: ObservableObject {
     // MARK: - Session / meetings
 
     private func resetSession() {
-        // meetingContext survives on purpose: it's filled before pressing "Слушать".
+        // meetingContext survives on purpose: it's filled before pressing "Listen".
         currentText = ""
         terms = []
         answerRequests = []

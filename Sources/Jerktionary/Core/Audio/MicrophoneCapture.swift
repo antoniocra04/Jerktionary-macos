@@ -15,7 +15,7 @@ final class MicrophoneCapture {
     ) async throws {
         guard await Self.requestMicAccess() else {
             throw BackendError(
-                message: "Нет доступа к микрофону. Разрешите в System Settings → Privacy & Security → Microphone.",
+                message: "No microphone access. Allow it in System Settings → Privacy & Security → Microphone.",
                 status: 0
             )
         }
@@ -27,7 +27,7 @@ final class MicrophoneCapture {
 
         let format = inputNode.inputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw BackendError(message: "Микрофон не найден или недоступен.", status: 0)
+            throw BackendError(message: "The microphone is missing or unavailable.", status: 0)
         }
         let sourceRate = format.sampleRate
 
@@ -77,7 +77,7 @@ final class MicrophoneCapture {
 
     private func setInputDevice(_ deviceID: AudioDeviceID) throws {
         guard let audioUnit = engine.inputNode.audioUnit else {
-            throw BackendError(message: "Не удалось получить аудиоюнит входа.", status: 0)
+            throw BackendError(message: "Could not obtain the input audio unit.", status: 0)
         }
         var device = deviceID
         let status = AudioUnitSetProperty(

@@ -6,10 +6,10 @@ enum AudioSource: String, CaseIterable, Identifiable {
     case system
     var id: String { rawValue }
 
-    var russianLabel: String {
+    var label: String {
         switch self {
-        case .microphone: "Микрофон"
-        case .system: "Система"
+        case .microphone: "Microphone"
+        case .system: "System"
         }
     }
 }
@@ -21,10 +21,10 @@ enum OverlayPane: String, CaseIterable, Identifiable {
     case chat
     var id: String { rawValue }
 
-    var russianLabel: String {
+    var label: String {
         switch self {
-        case .live: "Эфир"
-        case .chat: "Чат"
+        case .live: "Live"
+        case .chat: "Chat"
         }
     }
 
@@ -48,11 +48,11 @@ enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    var russianLabel: String {
+    var label: String {
         switch self {
-        case .system: "Как в macOS"
-        case .light: "Светлая"
-        case .dark: "Тёмная"
+        case .system: "Match macOS"
+        case .light: "Light"
+        case .dark: "Dark"
         }
     }
 }

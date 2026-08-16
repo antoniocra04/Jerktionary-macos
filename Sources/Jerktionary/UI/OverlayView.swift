@@ -98,8 +98,8 @@ struct OverlayView: View {
             OverlayIconButton(
                 systemImage: store.contentProtectionEnabled ? "eye.slash" : "eye",
                 label: store.contentProtectionEnabled
-                    ? "Сейчас скрыто от захвата — нажмите, чтобы показывать"
-                    : "Сейчас видно при захвате — нажмите, чтобы скрыть",
+                    ? "Hidden from screen capture — click to show"
+                    : "Visible in screen capture — click to hide",
                 tint: store.contentProtectionEnabled ? .secondary : .orange
             ) {
                 store.contentProtectionEnabled.toggle()
@@ -108,14 +108,14 @@ struct OverlayView: View {
 
             OverlayIconButton(
                 systemImage: "arrow.up.left.and.arrow.down.right",
-                label: "Развернуть в обычное окно"
+                label: "Expand to the normal window"
             ) {
                 store.toggleOverlay()
             }
 
             OverlayIconButton(
                 systemImage: "xmark",
-                label: "Спрятать карточку. Вернуть — Ctrl+Shift+O"
+                label: "Hide the card. Bring it back with Ctrl+Shift+O"
             ) {
                 store.hideOverlay()
             }
@@ -134,32 +134,32 @@ struct OverlayView: View {
                 .layoutPriority(1)
             Spacer(minLength: 0)
             Menu {
-                Picker("Прозрачность фона", selection: $settings.overlayOpacity) {
+                Picker("Background opacity", selection: $settings.overlayOpacity) {
                     Text("70%").tag(0.70)
                     Text("85%").tag(0.85)
                     Text("100%").tag(1.0)
                 }
                 Divider()
                 Button(store.contentProtectionEnabled
-                       ? "Показывать при захвате экрана"
-                       : "Скрыть при захвате экрана") {
+                       ? "Show during screen capture"
+                       : "Hide during screen capture") {
                     store.contentProtectionEnabled.toggle()
                     WindowController.setContentProtection(store.contentProtectionEnabled)
                 }
-                Button("Развернуть в обычное окно") {
+                Button("Expand to the normal window") {
                     store.toggleOverlay()
                 }
             } label: {
-                Label("Параметры карточки", systemImage: "ellipsis.circle")
+                Label("Card options", systemImage: "ellipsis.circle")
             }
             .labelStyle(.iconOnly)
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Параметры карточки")
+            .help("Card options")
 
             OverlayIconButton(
                 systemImage: "xmark",
-                label: "Спрятать карточку. Вернуть — Ctrl+Shift+O"
+                label: "Hide the card. Bring it back with Ctrl+Shift+O"
             ) {
                 store.hideOverlay()
             }
@@ -191,7 +191,7 @@ struct OverlayView: View {
         .padding(.vertical, 6)
         .background(.orange.opacity(0.16))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Сбой")
+        .accessibilityLabel("Problem")
         .accessibilityValue(fault)
         .help(fault)
         .onAppear { AccessibilityAnnouncer.announce(fault) }
@@ -233,7 +233,7 @@ struct OverlayView: View {
                 ScrollView {
                     AnswerCardView(question: shown, compact: true)
                         // Without this the card keeps its @State across a change
-                        // of question: "Подробнее" left on hid the next answer
+                        // of question: "More detail" left on hid the next answer
                         // behind a spinner even though it was already cached.
                         .id(shown)
                         .padding(.horizontal, 12)
@@ -249,8 +249,8 @@ struct OverlayView: View {
             } else {
                 hint(
                     store.isListening
-                        ? "Нажмите «Ответить», когда понадобится подсказка"
-                        : "Начните прослушивание, чтобы подготовить ответ",
+                        ? "Press “Answer” when you need a hint"
+                        : "Start listening to prepare an answer",
                     icon: "sparkles"
                 )
             }
@@ -268,31 +268,31 @@ struct OverlayView: View {
                     pinned = nil
                     seen = questions.first
                 } label: {
-                    Label("Новый ответ", systemImage: "arrow.up.circle.fill")
+                    Label("New answer", systemImage: "arrow.up.circle.fill")
                         .font(.caption.weight(.medium))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.tint)
             } else {
-                Text("Последний ответ")
+                Text("Latest answer")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
 
-            Text("\(questions.count - shownIndex) из \(questions.count)")
+            Text("\(questions.count - shownIndex) of \(questions.count)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
 
-            OverlayIconButton(systemImage: "chevron.left", label: "Более старый ответ") {
+            OverlayIconButton(systemImage: "chevron.left", label: "Older answer") {
                 move(+1)
             }
             .disabled(shownIndex >= questions.count - 1)
             .keyboardShortcut(.leftArrow, modifiers: [])
 
-            OverlayIconButton(systemImage: "chevron.right", label: "Более новый ответ") {
+            OverlayIconButton(systemImage: "chevron.right", label: "Newer answer") {
                 move(-1)
             }
             .disabled(shownIndex <= 0)
@@ -337,7 +337,7 @@ struct OverlayView: View {
                         .padding(.bottom, 8)
                 } else {
                     hint(
-                        "Выберите существующий чат или создайте новый",
+                        "Pick an existing chat or create a new one",
                         icon: "bubble.left.and.bubble.right"
                     )
                 }
@@ -349,7 +349,7 @@ struct OverlayView: View {
     private var overlayChatBar: some View {
         HStack(spacing: 6) {
             Menu {
-                Button("Новый чат", systemImage: "square.and.pencil") {
+                Button("New chat", systemImage: "square.and.pencil") {
                     chats.create()
                 }
 
@@ -383,10 +383,10 @@ struct OverlayView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize(horizontal: false, vertical: true)
-            .help("Переключить чат")
-            .accessibilityLabel("Текущий чат: \(selectedChatTitle). Переключить чат")
+            .help("Switch chat")
+            .accessibilityLabel("Current chat: \(selectedChatTitle). Switch chat")
 
-            OverlayIconButton(systemImage: "square.and.pencil", label: "Новый чат") {
+            OverlayIconButton(systemImage: "square.and.pencil", label: "New chat") {
                 chats.create()
             }
         }
@@ -399,15 +399,15 @@ struct OverlayView: View {
     private var selectedChatTitle: String {
         guard let id = chats.selectedID,
               let conversation = chats.conversation(id: id)
-        else { return "Выберите чат" }
+        else { return "Pick a chat" }
         return conversation.displayTitle
     }
 
     private var transcriptDisclosure: some View {
-        DisclosureGroup("Транскрипт", isExpanded: $transcriptExpanded) {
+        DisclosureGroup("Transcript", isExpanded: $transcriptExpanded) {
             Group {
                 if store.currentText.isEmpty {
-                    Text(store.isListening ? "Расшифровка появится здесь" : "Прослушивание выключено")
+                    Text(store.isListening ? "The transcript will appear here" : "Listening is off")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -472,7 +472,7 @@ private struct PaneTabs: View {
                             Image(systemName: pane.systemImage)
                                 .font(.system(size: 12, weight: selection == pane ? .semibold : .regular))
                         } else {
-                            Text(pane.russianLabel)
+                            Text(pane.label)
                                 .font(.caption.weight(selection == pane ? .semibold : .regular))
                                 .lineLimit(1)
                         }
@@ -496,7 +496,7 @@ private struct PaneTabs: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(selection == pane ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .accessibilityLabel(
-                    badged == pane ? "\(pane.russianLabel), есть новый ответ" : pane.russianLabel
+                    badged == pane ? "\(pane.label), new answer" : pane.label
                 )
                 .accessibilityAddTraits(selection == pane ? [.isSelected, .isButton] : .isButton)
             }
@@ -552,19 +552,19 @@ private struct OpacityControl: View {
 
     var body: some View {
         Menu {
-            Picker("Прозрачность фона", selection: $opacity) {
+            Picker("Background opacity", selection: $opacity) {
                 Text("70%").tag(0.70)
                 Text("85%").tag(0.85)
                 Text("100%").tag(1.0)
             }
         } label: {
-            Label("Прозрачность фона", systemImage: "circle.lefthalf.filled")
+            Label("Background opacity", systemImage: "circle.lefthalf.filled")
         }
         .labelStyle(.iconOnly)
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Прозрачность фона: \(Int(opacity * 100))%")
-        .accessibilityLabel("Прозрачность фона")
-        .accessibilityValue("\(Int(opacity * 100)) процентов")
+        .help("Background opacity: \(Int(opacity * 100))%")
+        .accessibilityLabel("Background opacity")
+        .accessibilityValue("\(Int(opacity * 100)) percent")
     }
 }

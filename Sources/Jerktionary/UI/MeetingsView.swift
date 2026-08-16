@@ -16,24 +16,24 @@ struct MeetingDetailView: View {
                     Text(MeetingsStore.formatDate(meeting.startedAt))
                         .font(.title3.weight(.bold))
                     Spacer()
-                    CircleToolbarButton(systemImage: "square.and.arrow.up", help: "Экспорт в Markdown") {
+                    CircleToolbarButton(systemImage: "square.and.arrow.up", help: "Export to Markdown") {
                         exportMarkdown()
                     }
-                    CircleToolbarButton(systemImage: "trash", help: "Удалить встречу") {
+                    CircleToolbarButton(systemImage: "trash", help: "Delete the meeting") {
                         confirmingDelete = true
                     }
-                    CircleToolbarButton(systemImage: "xmark", help: "Закрыть") {
+                    CircleToolbarButton(systemImage: "xmark", help: "Close") {
                         (onClose ?? { dismiss() })()
                     }
                 }
 
                 if !meeting.context.isEmpty {
-                    LabeledBlock(label: "Контекст", text: meeting.context)
+                    LabeledBlock(label: "Context", text: meeting.context)
                         .journalPromptCard(padding: 12)
                 }
 
                 if !meeting.qa.isEmpty {
-                    Text("Вопросы и ответы")
+                    Text("Questions and answers")
                         .font(.headline)
                     ForEach(Array(meeting.qa.enumerated()), id: \.offset) { index, item in
                         VStack(alignment: .leading, spacing: 6) {
@@ -51,7 +51,7 @@ struct MeetingDetailView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             if !item.example.isEmpty {
-                                LabeledBlock(label: "Пример", text: item.example)
+                                LabeledBlock(label: "Example", text: item.example)
                             }
                         }
                         .journalCard(padding: 12)
@@ -59,7 +59,7 @@ struct MeetingDetailView: View {
                 }
 
                 if !meeting.transcript.isEmpty {
-                    Text("Транскрипт")
+                    Text("Transcript")
                         .font(.headline)
                     Text(meeting.transcript)
                         .font(.callout)
@@ -71,14 +71,14 @@ struct MeetingDetailView: View {
             .padding(20)
         }
         .scrollContentBackground(.hidden)
-        .alert("Удалить встречу?", isPresented: $confirmingDelete) {
-            Button("Удалить", role: .destructive) {
+        .alert("Delete this meeting?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive) {
                 store.meetings.delete(meeting.id)
                 (onClose ?? { dismiss() })()
             }
-            Button("Отмена", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Транскрипт и ответы этой встречи нельзя будет восстановить.")
+            Text("This meeting's transcript and answers cannot be recovered.")
         }
     }
 

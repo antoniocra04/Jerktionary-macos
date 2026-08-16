@@ -37,7 +37,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Встречи")
+                        Text("Meetings")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -49,24 +49,24 @@ struct SidebarView: View {
                                 Image(systemName: selecting ? "checkmark" : "checklist")
                             }
                             .buttonStyle(.plain)
-                            .help(selecting ? "Завершить выбор" : "Выбрать встречи")
-                            .accessibilityLabel(selecting ? "Завершить выбор" : "Выбрать встречи")
+                            .help(selecting ? "Finish selecting" : "Select meetings")
+                            .accessibilityLabel(selecting ? "Finish selecting" : "Select meetings")
                         }
                     }
                     .padding(.leading, 2)
 
                     if !meetings.meetings.isEmpty {
-                        TextField("Поиск", text: $searchText)
+                        TextField("Search", text: $searchText)
                             .textFieldStyle(.roundedBorder)
-                            .accessibilityLabel("Поиск по встречам")
+                            .accessibilityLabel("Search meetings")
                     }
                     if meetings.meetings.isEmpty {
-                        Text("Прошедшие встречи появятся здесь")
+                        Text("Past meetings will appear here")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.leading, 2)
                     } else if filteredMeetings.isEmpty {
-                        Text("Ничего не найдено")
+                        Text("Nothing found")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.leading, 2)
@@ -96,7 +96,7 @@ struct SidebarView: View {
 
                     if selecting {
                         HStack(spacing: 8) {
-                            Text("Выбрано: \(selectedIDs.count)")
+                            Text("Selected: \(selectedIDs.count)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -104,16 +104,16 @@ struct SidebarView: View {
                                 Image(systemName: "square.and.arrow.up")
                             }
                             .disabled(selectedIDs.isEmpty)
-                            .help("Экспортировать выбранные")
-                            .accessibilityLabel("Экспортировать выбранные встречи")
+                            .help("Export selected")
+                            .accessibilityLabel("Export the selected meetings")
                             Button(role: .destructive) {
                                 confirmingBulkDelete = true
                             } label: {
                                 Image(systemName: "trash")
                             }
                             .disabled(selectedIDs.isEmpty)
-                            .help("Удалить выбранные")
-                            .accessibilityLabel("Удалить выбранные встречи")
+                            .help("Delete selected")
+                            .accessibilityLabel("Delete the selected meetings")
                         }
                         .buttonStyle(.borderless)
                         .padding(.top, 4)
@@ -126,15 +126,15 @@ struct SidebarView: View {
             .padding(.bottom, 16)
         }
         .scrollContentBackground(.hidden)
-        .alert("Удалить выбранные встречи?", isPresented: $confirmingBulkDelete) {
-            Button("Удалить", role: .destructive) {
+        .alert("Delete the selected meetings?", isPresented: $confirmingBulkDelete) {
+            Button("Delete", role: .destructive) {
                 for id in selectedIDs { meetings.delete(id) }
                 selectedIDs = []
                 selecting = false
             }
-            Button("Отмена", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Транскрипты и ответы нельзя будет восстановить.")
+            Text("The transcripts and answers cannot be recovered.")
         }
     }
 
@@ -205,7 +205,7 @@ private struct MeetingRow: View {
                             .accessibilityHidden(true)
                     }
                 }
-                Text(meeting.context.isEmpty ? "Без контекста" : meeting.context)
+                Text(meeting.context.isEmpty ? "No context" : meeting.context)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -223,17 +223,17 @@ private struct MeetingRow: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Удалить", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 confirmingDelete = true
             }
         }
-        .alert("Удалить встречу?", isPresented: $confirmingDelete) {
-            Button("Удалить", role: .destructive) {
+        .alert("Delete this meeting?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive) {
                 meetings.delete(meeting.id)
             }
-            Button("Отмена", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Транскрипт и ответы этой встречи нельзя будет восстановить.")
+            Text("This meeting's transcript and answers cannot be recovered.")
         }
     }
 }
@@ -257,8 +257,8 @@ struct ComponentsListView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(component.name)
                 .accessibilityValue(component.ready
-                                    ? "готов"
-                                    : (component.required ? "обязательный компонент не готов" : "необязательный компонент не готов"))
+                                    ? "ready"
+                                    : (component.required ? "required component not ready" : "optional component not ready"))
                 .accessibilityHint(component.details)
             }
         }

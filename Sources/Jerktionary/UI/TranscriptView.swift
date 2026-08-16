@@ -7,15 +7,15 @@ struct TranscriptView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Транскрипт")
+            Text("Transcript")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.leading, 4)
 
             if store.currentText.isEmpty {
                 Text(store.isListening
-                     ? "Слушаю… говорите, транскрипт появится здесь."
-                     : "Расшифровка появится здесь.")
+                     ? "Listening… start talking and the transcript will appear here."
+                     : "The transcript will appear here.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 110, alignment: .center)
@@ -72,15 +72,15 @@ struct TermExplanationPopover: View {
                         .textSelection(.enabled)
                 }
                 if !explanation.example.isEmpty {
-                    LabeledBlock(label: "Пример", text: explanation.example)
+                    LabeledBlock(label: "Example", text: explanation.example)
                 }
                 if !explanation.whyImportant.isEmpty {
-                    LabeledBlock(label: "Почему важно", text: explanation.whyImportant)
+                    LabeledBlock(label: "Why it matters", text: explanation.whyImportant)
                 }
             } else if let error = state.error {
                 Text(error).foregroundStyle(.red)
             } else if !state.loading {
-                Text("Объяснение появится здесь").foregroundStyle(.secondary)
+                Text("The explanation will appear here").foregroundStyle(.secondary)
             }
         }
         .padding(16)
@@ -92,8 +92,8 @@ struct TermExplanationPopover: View {
 
     private func sourceLabel(_ source: ExplanationSource) -> String {
         switch source {
-        case .cache: "кэш"
-        case .localLLM: "локальная модель"
+        case .cache: "cache"
+        case .localLLM: "local model"
         case .apiLLM: "API"
         }
     }

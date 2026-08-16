@@ -112,12 +112,12 @@ final class MeetingsStore: ObservableObject {
     }
 
     static func markdown(for record: MeetingRecord) -> String {
-        var lines = ["# Встреча \(formatDate(record.startedAt))", ""]
+        var lines = ["# Meeting \(formatDate(record.startedAt))", ""]
         if !record.context.isEmpty {
-            lines += ["**Контекст:** \(record.context)", ""]
+            lines += ["**Context:** \(record.context)", ""]
         }
         if !record.qa.isEmpty {
-            lines += ["## Вопросы и ответы", ""]
+            lines += ["## Questions and answers", ""]
             for (index, item) in record.qa.enumerated() {
                 lines += ["### \(index + 1). \(item.question)", ""]
                 if !item.answer.isEmpty {
@@ -127,12 +127,12 @@ final class MeetingsStore: ObservableObject {
                     lines += item.points.map { "- \($0)" } + [""]
                 }
                 if !item.example.isEmpty {
-                    lines += ["Пример: \(item.example)", ""]
+                    lines += ["Example: \(item.example)", ""]
                 }
             }
         }
         if !record.transcript.isEmpty {
-            lines += ["## Транскрипт", "", record.transcript, ""]
+            lines += ["## Transcript", "", record.transcript, ""]
         }
         return lines.joined(separator: "\n")
     }

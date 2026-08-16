@@ -23,7 +23,7 @@ struct AnswerRequestBar: View {
         VStack(alignment: .leading, spacing: 8) {
             if editing {
                 HStack(spacing: 8) {
-                    TextField("Что нужно подсказать?", text: $draft)
+                    TextField("What do you need a hint about?", text: $draft)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit(submitDraft)
 
@@ -32,8 +32,8 @@ struct AnswerRequestBar: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help("Ответить")
-                    .accessibilityLabel("Ответить на введённый запрос")
+                    .help("Answer")
+                    .accessibilityLabel("Answer the request you typed")
 
                     Button {
                         editing = false
@@ -41,8 +41,8 @@ struct AnswerRequestBar: View {
                         Image(systemName: "xmark")
                     }
                     .buttonStyle(.borderless)
-                    .help("Отменить редактирование")
-                    .accessibilityLabel("Отменить редактирование")
+                    .help("Cancel editing")
+                    .accessibilityLabel("Cancel editing")
                 }
             } else {
                 HStack(spacing: 8) {
@@ -50,7 +50,7 @@ struct AnswerRequestBar: View {
                         Button {
                             store.cancelAnswer()
                         } label: {
-                            Label("Остановить", systemImage: "stop.fill")
+                            Label("Stop", systemImage: "stop.fill")
                         }
                         .buttonStyle(.borderedProminent)
                         .buttonBorderShape(.capsule)
@@ -59,7 +59,7 @@ struct AnswerRequestBar: View {
                         Button {
                             store.answerNow()
                         } label: {
-                            Label(compact ? "Ответить" : "Ответить сейчас", systemImage: "sparkles")
+                            Label(compact ? "Answer" : "Answer now", systemImage: "sparkles")
                         }
                         .buttonStyle(.borderedProminent)
                         .buttonBorderShape(.capsule)
@@ -68,11 +68,11 @@ struct AnswerRequestBar: View {
                     }
 
                     Menu {
-                        Button("Уточнить запрос…", systemImage: "pencil") {
+                        Button("Refine the request…", systemImage: "pencil") {
                             draft = TranscriptExcerpt.latest(in: store.currentText) ?? ""
                             editing = true
                         }
-                        Button("Ответить с полным контекстом", systemImage: "text.append") {
+                        Button("Answer with full context", systemImage: "text.append") {
                             store.fullContextAnswer()
                         }
                         .disabled(!canGenerate)
@@ -81,13 +81,13 @@ struct AnswerRequestBar: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .help("Другие способы ответа")
-                    .accessibilityLabel("Другие способы ответа")
+                    .help("Other ways to answer")
+                    .accessibilityLabel("Other ways to answer")
 
                     if answers.isGenerating {
                         ProgressView()
                             .controlSize(.small)
-                            .accessibilityLabel("Ответ готовится")
+                            .accessibilityLabel("An answer is being prepared")
                     }
 
                     Spacer(minLength: 0)
@@ -109,10 +109,10 @@ struct AnswerRequestBar: View {
 
     private var answerButtonHelp: String {
         if !store.backendReady || store.backendUnavailable {
-            return "Сервис ответов сейчас недоступен"
+            return "The answer service is unavailable right now"
         }
-        if !hasTranscript { return "Пока недостаточно речи для ответа" }
-        return "Зафиксировать последнюю реплику и подготовить ответ (Ctrl+Shift+Space)"
+        if !hasTranscript { return "Not enough speech yet to answer" }
+        return "Freeze the last utterance and prepare an answer (Ctrl+Shift+Space)"
     }
 }
 
@@ -161,7 +161,7 @@ struct LiveAnswersView: View {
 
     private var pager: some View {
         HStack {
-            Text(index == 0 ? "Последний ответ" : "\(total - index) из \(total)")
+            Text(index == 0 ? "Latest answer" : "\(total - index) of \(total)")
             Spacer()
             Button {
                 move(+1)
@@ -169,16 +169,16 @@ struct LiveAnswersView: View {
                 Image(systemName: "chevron.left")
             }
             .disabled(index >= total - 1)
-            .help("Более старый ответ")
-            .accessibilityLabel("Более старый ответ")
+            .help("Older answer")
+            .accessibilityLabel("Older answer")
             Button {
                 move(-1)
             } label: {
                 Image(systemName: "chevron.right")
             }
             .disabled(index <= 0)
-            .help("Более новый ответ")
-            .accessibilityLabel("Более новый ответ")
+            .help("Newer answer")
+            .accessibilityLabel("Newer answer")
         }
         .buttonStyle(.borderless)
         .font(.caption)
@@ -188,7 +188,7 @@ struct LiveAnswersView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Когда понадобится подсказка, нажмите «Ответить сейчас».")
+            Text("When you need a hint, press “Answer now”.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -298,7 +298,7 @@ struct AnswerCardView: View {
                 if state.streaming {
                     HStack(spacing: 5) {
                         ProgressView().controlSize(.small)
-                        Text("печатается")
+                        Text("typing")
                             .font(.caption)
                             .foregroundStyle(Color.accentColor)
                     }
@@ -312,7 +312,7 @@ struct AnswerCardView: View {
                 Button {
                     answers.regenerate(question: question, deep: deep, context: store.currentText)
                 } label: {
-                    Label("Попробовать ещё раз", systemImage: "arrow.counterclockwise")
+                    Label("Try again", systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
@@ -360,7 +360,7 @@ struct AnswerCardView: View {
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Готовлю ответ…")
+                    Text("Preparing the answer…")
                         .foregroundStyle(.secondary)
                         .font(.callout)
                 }
@@ -382,7 +382,7 @@ struct AnswerCardView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = true
-        AccessibilityAnnouncer.announce("Ответ скопирован")
+        AccessibilityAnnouncer.announce("Answer copied")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             copied = false
         }
@@ -408,7 +408,7 @@ struct AnswerCardView: View {
                     regenerateButton
                 }
             } label: {
-                Label("Действия с ответом", systemImage: "ellipsis.circle")
+                Label("Answer actions", systemImage: "ellipsis.circle")
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -416,7 +416,7 @@ struct AnswerCardView: View {
     }
 
     private var depthButton: some View {
-        Button(deep ? "Короче" : "Подробнее") {
+        Button(deep ? "Shorter" : "More detail") {
             deep.toggle()
             if deep {
                 let started = answers.ensureStream(
@@ -426,7 +426,7 @@ struct AnswerCardView: View {
                 )
                 if !started, answers.state(question: question, deep: true).answer == nil {
                     deep = false
-                    store.showNotice("Ответ уже готовится")
+                    store.showNotice("An answer is already being prepared")
                 }
             }
         }
@@ -436,7 +436,7 @@ struct AnswerCardView: View {
         Button {
             copy(answer)
         } label: {
-            Label(copied ? "Скопировано" : "Копировать",
+            Label(copied ? "Copied" : "Copy",
                   systemImage: copied ? "checkmark" : "doc.on.doc")
         }
     }
@@ -445,7 +445,7 @@ struct AnswerCardView: View {
         Button {
             answers.regenerate(question: question, deep: deep, context: store.currentText)
         } label: {
-            Label("Перегенерировать", systemImage: "arrow.counterclockwise")
+            Label("Regenerate", systemImage: "arrow.counterclockwise")
         }
     }
 }
@@ -473,12 +473,12 @@ struct MeetingContextField: View {
     private var fields: some View {
         VStack(alignment: .leading, spacing: compact ? 4 : 8) {
             if !compact {
-                Text("Контекст встречи")
+                Text("Meeting context")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.tint)
             }
             TextField(
-                compact ? "Контекст встречи" : "Вакансия, компания или тема разговора",
+                compact ? "Meeting context" : "Role, company, or topic of the conversation",
                 text: $store.meetingContext,
                 axis: .vertical
             )

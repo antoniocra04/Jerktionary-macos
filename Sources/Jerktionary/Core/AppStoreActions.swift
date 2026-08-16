@@ -22,10 +22,10 @@ enum OverlayStatus: Equatable {
 
     var label: String {
         switch self {
-        case .fault: "Сбой — подробности в карточке"
-        case .hearing: "Слышу голос"
-        case .listening: "Слушаю, тихо"
-        case .idle: "Распознавание выключено"
+        case .fault: "Problem — details in the card"
+        case .hearing: "Hearing a voice"
+        case .listening: "Listening, quiet"
+        case .idle: "Recognition off"
         }
     }
 }
@@ -36,13 +36,13 @@ extension AppStore {
     var overlayFault: String? {
         if let error = microphoneError ?? websocketError { return error }
         if backendStatusLoaded, backendUnavailable {
-            return "Нет связи с сервисом ответов. Проверьте подключение в настройках."
+            return "No connection to the answer service. Check the connection in Settings."
         }
         if backendStatusLoaded, !backendReady {
-            return "Сервис ответов ещё не готов."
+            return "The answer service is not ready yet."
         }
         if isListening, connectionStatus == .error {
-            return "Нет связи с распознаванием."
+            return "No connection to speech recognition."
         }
         return nil
     }
@@ -59,7 +59,7 @@ extension AppStore {
     func hideOverlay() {
         overlayMode = false
         OverlayPanel.shared.hide()
-        showNotice("Компактное окно скрыто · Вернуть: Ctrl+Shift+O")
+        showNotice("Compact card hidden · Bring it back: Ctrl+Shift+O")
     }
 
     func toggleOverlay() {
@@ -97,7 +97,7 @@ extension AppStore {
     /// Showing the chat means two different things depending on the mode, and
     /// setting only `mainTab` was the bug: in the compact card the main window
     /// is hidden and the card shows `overlayPane`, so a screenshot taken while
-    /// the card sat on Эфир went into `pendingAttachments` with
+    /// the card sat on Live went into `pendingAttachments` with
     /// no composer mounted to take it. Nothing appeared, and the hotkey looked
     /// dead.
     func deliverToChat(_ attachment: ChatAttachment) async {
@@ -110,14 +110,14 @@ extension AppStore {
         let prompt = settings.chatScreenshotPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else {
             chats.pendingAttachments.append(attachment)
-            showNotice("Снимок добавлен в чат")
+            showNotice("Screenshot added to the chat")
             return
         }
 
         await chats.ensureCapabilities(client: backendClient, model: conversation.model)
         guard !chats.capabilities.refusesImages else {
             chats.pendingAttachments.append(attachment)
-            showNotice("Снимок добавлен в чат")
+            showNotice("Screenshot added to the chat")
             return
         }
         chats.send(
@@ -127,7 +127,7 @@ extension AppStore {
             client: backendClient,
             systemPrompt: settings.chatSystemPrompt
         )
-        showNotice("Снимок отправлен в чат")
+        showNotice("Screenshot sent to the chat")
     }
 
     /// Ctrl+Shift+S: grab the screen into the chat without showing anything.
@@ -148,7 +148,7 @@ extension AppStore {
                 attachment = try await ScreenshotCapture.captureScreen()
             } catch {
                 chats.transientError = error.localizedDescription
-                showNotice("Не удалось сделать снимок")
+                showNotice("Could not take the screenshot")
                 return
             }
 

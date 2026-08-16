@@ -14,7 +14,7 @@ struct MathView: View {
         MathNodeView(node: LatexParser.parse(latex), size: size)
             // Formulas are read, not spoken by VoiceOver glyph by glyph.
             .accessibilityElement()
-            .accessibilityLabel("Формула: \(LatexParser.flatten(LatexParser.parse(latex)))")
+            .accessibilityLabel("Formula: \(LatexParser.flatten(LatexParser.parse(latex)))")
     }
 }
 

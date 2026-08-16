@@ -12,36 +12,36 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Сервис ответов") {
-                TextField("Адрес сервиса", text: $settings.backendHttpUrl)
+            Section("Answer service") {
+                TextField("Service address", text: $settings.backendHttpUrl)
                     .onSubmit { checkBackend() }
-                Button(checkingBackend ? "Проверяю…" : "Проверить подключение") {
+                Button(checkingBackend ? "Checking…" : "Check connection") {
                     checkBackend()
                 }
                 .disabled(!settings.hasValidBackendUrl || checkingBackend)
                 if store.backendStatusLoaded {
                     Label(
-                        store.backendReady ? "Сервис готов" : "Нет подключения",
+                        store.backendReady ? "Service ready" : "Not connected",
                         systemImage: store.backendReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(store.backendReady ? .green : .orange)
                 }
             }
 
-            Section("Аудио") {
-                Picker("Источник", selection: Binding(
+            Section("Audio") {
+                Picker("Source", selection: Binding(
                     get: { settings.audioSource },
                     set: { settings.audioSource = $0 }
                 )) {
                     ForEach(AudioSource.allCases) { source in
-                        Text(source.russianLabel).tag(source)
+                        Text(source.label).tag(source)
                     }
                 }
                 .pickerStyle(.segmented)
 
                 if settings.audioSource == .microphone {
-                    Picker("Микрофон", selection: $settings.audioInputDeviceUID) {
-                        Text("По умолчанию").tag("")
+                    Picker("Microphone", selection: $settings.audioInputDeviceUID) {
+                        Text("Default").tag("")
                         ForEach(devices) { device in
                             Text(device.name).tag(device.uid)
                         }
@@ -49,33 +49,33 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Профиль") {
-                TextField("Имя окна", text: $settings.displayName)
+            Section("Profile") {
+                TextField("Window name", text: $settings.displayName)
                     .onSubmit { WindowController.setTitle(settings.displayName) }
-                TextField("О себе", text: $settings.aboutMe, axis: .vertical)
+                TextField("About me", text: $settings.aboutMe, axis: .vertical)
                     .lineLimit(3...6)
             }
 
-            Section("Оформление") {
-                Picker("Тема", selection: $settings.theme) {
+            Section("Appearance") {
+                Picker("Theme", selection: $settings.theme) {
                     ForEach(AppTheme.allCases) { theme in
-                        Text(theme.russianLabel).tag(theme)
+                        Text(theme.label).tag(theme)
                     }
                 }
                 .pickerStyle(.segmented)
             }
 
-            Section("Чат") {
+            Section("Chat") {
                 VStack(alignment: .leading, spacing: 4) {
-                    TextField("Модели, по одной в строке", text: $settings.chatModelsRaw, axis: .vertical)
+                    TextField("Models, one per line", text: $settings.chatModelsRaw, axis: .vertical)
                         .lineLimit(3...8)
                         .font(.system(.body, design: .monospaced))
                 }
-                TextField("Системный промпт", text: $settings.chatSystemPrompt, axis: .vertical)
+                TextField("System prompt", text: $settings.chatSystemPrompt, axis: .vertical)
                     .lineLimit(2...6)
                 VStack(alignment: .leading, spacing: 4) {
                     TextField(
-                        "Вопрос к снимку экрана",
+                        "Question asked about a screenshot",
                         text: $settings.chatScreenshotPrompt,
                         axis: .vertical
                     )
@@ -83,39 +83,39 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Справка") {
-                DisclosureGroup("Горячие клавиши") {
-                    LabeledContent("Ответить сейчас", value: "Ctrl+Shift+Space")
-                    LabeledContent("Ответить с полным контекстом", value: "Ctrl+Shift+Enter")
-                    LabeledContent("Компактное окно", value: "Ctrl+Shift+O")
-                    LabeledContent("Снимок в чат", value: "Ctrl+Shift+S")
+            Section("Help") {
+                DisclosureGroup("Keyboard shortcuts") {
+                    LabeledContent("Answer now", value: "Ctrl+Shift+Space")
+                    LabeledContent("Answer with full context", value: "Ctrl+Shift+Enter")
+                    LabeledContent("Compact card", value: "Ctrl+Shift+O")
+                    LabeledContent("Screenshot to chat", value: "Ctrl+Shift+S")
                 }
-                Text("Транскрипция не запускает ответы автоматически — каждый запрос подтверждаете вы.")
+                Text("Transcription never starts an answer on its own — every request is yours to confirm.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Диагностика") {
-                DisclosureGroup("Технические сведения") {
-                    LabeledContent("Адрес", value: settings.normalizedHttpUrl)
+            Section("Diagnostics") {
+                DisclosureGroup("Technical details") {
+                    LabeledContent("Address", value: settings.normalizedHttpUrl)
                     if !chats.capabilities.label.isEmpty {
-                        LabeledContent("Провайдер", value: chats.capabilities.label)
+                        LabeledContent("Provider", value: chats.capabilities.label)
                         LabeledContent(
-                            "Модель по умолчанию",
+                            "Default model",
                             value: chats.capabilities.defaultModel.isEmpty ? "—" : chats.capabilities.defaultModel
                         )
                     }
                     if !store.backendComponents.isEmpty {
                         ComponentsListView(components: store.backendComponents)
                     }
-                    Button("Открыть веб-диагностику") {
+                    Button("Open web diagnostics") {
                         if let url = settings.swaggerUrl { NSWorkspace.shared.open(url) }
                     }
                 }
             }
 
             Section {
-                Button("Пройти настройку заново") {
+                Button("Run setup again") {
                     settings.hasCompletedSetup = false
                 }
             }
@@ -151,9 +151,9 @@ struct SetupWizardView: View {
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 6) {
-                Text("Настройка Jerktionary")
+                Text("Set up Jerktionary")
                     .font(.largeTitle.weight(.semibold))
-                Text("Шаг \(step + 1) из \(stepCount)")
+                Text("Step \(step + 1) of \(stepCount)")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -162,34 +162,34 @@ struct SetupWizardView: View {
                 switch step {
                 case 0:
                     wizardCard(
-                        title: "Профиль",
-                        subtitle: "Имя окна маскирует назначение приложения, а профиль помогает формулировать ответы."
+                        title: "Profile",
+                        subtitle: "The window name masks what the app is for, and the profile shapes how answers are phrased."
                     ) {
-                        TextField("Название окна", text: $settings.displayName)
+                        TextField("Window title", text: $settings.displayName)
                             .textFieldStyle(.roundedBorder)
-                        TextField("Например: senior frontend, React/TS, 7 лет опыта", text: $settings.aboutMe, axis: .vertical)
+                        TextField("For example: senior frontend, React/TS, 7 years of experience", text: $settings.aboutMe, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
                             .lineLimit(3...6)
                     }
                 case 1:
                     wizardCard(
-                        title: "Что слушаем?",
-                        subtitle: "Микрофон слышит вас. Системный звук — собеседника из приложения для звонков."
+                        title: "What are we listening to?",
+                        subtitle: "The microphone hears you. System audio hears the other side from your calling app."
                     ) {
-                        Picker("Источник звука", selection: Binding(
+                        Picker("Audio source", selection: Binding(
                             get: { settings.audioSource },
                             set: { settings.audioSource = $0 }
                         )) {
                             ForEach(AudioSource.allCases) { source in
-                                Text(source.russianLabel).tag(source)
+                                Text(source.label).tag(source)
                             }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
 
                         if settings.audioSource == .microphone {
-                            Picker("Микрофон", selection: $settings.audioInputDeviceUID) {
-                                Text("По умолчанию").tag("")
+                            Picker("Microphone", selection: $settings.audioInputDeviceUID) {
+                                Text("Default").tag("")
                                 ForEach(devices) { device in
                                     Text(device.name).tag(device.uid)
                                 }
@@ -198,25 +198,25 @@ struct SetupWizardView: View {
                     }
                 case 2:
                     wizardCard(
-                        title: "Разрешения",
-                        subtitle: "macOS требует отдельное разрешение для выбранного источника."
+                        title: "Permissions",
+                        subtitle: "macOS requires a separate permission for the source you picked."
                     ) {
                         permissionRow
                     }
                     .id(permissionRefresh)
                 case 3:
                     wizardCard(
-                        title: "Сервис ответов",
-                        subtitle: "Проверьте соединение до начала звонка."
+                        title: "Answer service",
+                        subtitle: "Check the connection before the call starts."
                     ) {
                         TextField("http://127.0.0.1:8000", text: $settings.backendHttpUrl)
                             .textFieldStyle(.roundedBorder)
                         if !settings.hasValidBackendUrl {
-                            Label("Введите корректный адрес HTTP или HTTPS", systemImage: "exclamationmark.circle.fill")
+                            Label("Enter a valid HTTP or HTTPS address", systemImage: "exclamationmark.circle.fill")
                                 .font(.callout)
                                 .foregroundStyle(.red)
                         }
-                        Button(checkingService ? "Проверяю…" : "Проверить подключение") {
+                        Button(checkingService ? "Checking…" : "Check connection") {
                             checkingService = true
                             let urlUnderTest = settings.normalizedHttpUrl
                             Task {
@@ -233,10 +233,10 @@ struct SetupWizardView: View {
                         if store.backendStatusLoaded {
                             Label(
                                 serviceIsVerified
-                                    ? "Сервис готов"
+                                    ? "Service ready"
                                     : (store.backendReady
-                                       ? "Проверьте этот адрес"
-                                       : "Подключение не установлено"),
+                                       ? "Check this address"
+                                       : "Connection not established"),
                                 systemImage: serviceIsVerified
                                     ? "checkmark.circle.fill"
                                     : "exclamationmark.triangle.fill"
@@ -246,13 +246,13 @@ struct SetupWizardView: View {
                     }
                 default:
                     wizardCard(
-                        title: "Готово к звонку",
-                        subtitle: "Jerktionary слушает постоянно, но готовит ответы только по вашей команде."
+                        title: "Ready for the call",
+                        subtitle: "Jerktionary listens continuously but only prepares an answer when you ask."
                     ) {
-                        readinessRow("Источник выбран", ready: true)
-                        readinessRow("Разрешение получено", ready: requiredPermissionGranted)
-                        readinessRow("Сервис ответов готов", ready: serviceIsVerified)
-                        Text("Ctrl+Shift+Space — ответить сейчас")
+                        readinessRow("Source selected", ready: true)
+                        readinessRow("Permission granted", ready: requiredPermissionGranted)
+                        readinessRow("Answer service ready", ready: serviceIsVerified)
+                        Text("Ctrl+Shift+Space — answer now")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -262,19 +262,19 @@ struct SetupWizardView: View {
 
             HStack {
                 if step > 0 {
-                    Button("Назад") { step -= 1 }
+                    Button("Back") { step -= 1 }
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.capsule)
                 }
                 Spacer()
                 if step < stepCount - 1 {
-                    Button("Далее") { step += 1 }
+                    Button("Next") { step += 1 }
                         .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
                     .controlSize(.large)
                     .disabled(!canContinue)
                 } else {
-                    Button("Готово") {
+                    Button("Done") {
                         settings.hasCompletedSetup = true
                         WindowController.setTitle(settings.displayName)
                         Task { await store.refreshBackendStatus() }
@@ -299,30 +299,30 @@ struct SetupWizardView: View {
     @ViewBuilder
     private var permissionRow: some View {
         if settings.audioSource == .microphone {
-            readinessRow("Доступ к микрофону", ready: microphoneGranted)
+            readinessRow("Microphone access", ready: microphoneGranted)
             if !microphoneGranted {
                 if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-                    Button("Разрешить микрофон") {
+                    Button("Allow the microphone") {
                         Task {
                             _ = await AVCaptureDevice.requestAccess(for: .audio)
                             permissionRefresh += 1
                         }
                     }
                 } else {
-                    Button("Открыть настройки macOS") {
+                    Button("Open macOS settings") {
                         openPrivacySettings("Privacy_Microphone")
                     }
                 }
             }
         } else {
-            readinessRow("Запись системного звука", ready: screenCaptureGranted)
+            readinessRow("System audio recording", ready: screenCaptureGranted)
             if !screenCaptureGranted {
                 HStack {
-                    Button("Запросить доступ") {
+                    Button("Request access") {
                         CGRequestScreenCaptureAccess()
                         permissionRefresh += 1
                     }
-                    Button("Открыть настройки macOS") {
+                    Button("Open macOS settings") {
                         openPrivacySettings("Privacy_ScreenCapture")
                     }
                 }

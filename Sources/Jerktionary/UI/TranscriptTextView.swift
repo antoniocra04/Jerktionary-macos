@@ -50,8 +50,8 @@ struct TranscriptTextView: NSViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
-        textView.setAccessibilityLabel("Транскрипт")
-        textView.setAccessibilityHelp("Термины подчёркнуты и открывают объяснение")
+        textView.setAccessibilityLabel("Transcript")
+        textView.setAccessibilityHelp("Terms are underlined and open an explanation")
         textView.textContainerInset = .zero
         textView.textContainer?.widthTracksTextView = true
         textView.layoutManager?.allowsNonContiguousLayout = true

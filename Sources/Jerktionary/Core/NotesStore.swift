@@ -46,7 +46,7 @@ struct Note: Codable, Identifiable, Hashable, Sendable {
             .split(separator: "\n", omittingEmptySubsequences: true)
             .first
             .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-        return firstLine.isEmpty ? "Новая заметка" : String(firstLine.prefix(Self.titleLengthLimit))
+        return firstLine.isEmpty ? "New note" : String(firstLine.prefix(Self.titleLengthLimit))
     }
 }
 
@@ -205,8 +205,8 @@ final class NotesStore: ObservableObject {
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "dd.MM.yyyy, HH:mm"
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "MMM d, yyyy, HH:mm"
         return formatter
     }()
 }

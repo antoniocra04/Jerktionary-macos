@@ -76,7 +76,7 @@ final class AnswerStreamManager: ObservableObject {
                 if let final {
                     self.cache[key] = final
                     self.store.recordAnswer(question: question, answer: final)
-                    self.store.showNotice(deep ? "Подробный ответ готов" : "Ответ готов")
+                    self.store.showNotice(deep ? "Detailed answer ready" : "Answer ready")
                 }
             } catch {
                 if !Task.isCancelled {
@@ -99,7 +99,7 @@ final class AnswerStreamManager: ObservableObject {
     func regenerate(question: String, deep: Bool, context: String) {
         let key = Key(question: question, deep: deep)
         guard tasks[key] == nil, activeKey == nil else {
-            store.showNotice("Ответ уже готовится")
+            store.showNotice("An answer is already being prepared")
             return
         }
         cache[key] = nil
@@ -112,7 +112,7 @@ final class AnswerStreamManager: ObservableObject {
         guard let activeKey, let task = tasks[activeKey] else { return false }
         task.cancel()
         tasks[activeKey] = nil
-        inflight[activeKey] = StreamState(done: true, error: "Генерация остановлена")
+        inflight[activeKey] = StreamState(done: true, error: "Generation stopped")
         self.activeKey = nil
         store.answerStreamingCount = max(0, store.answerStreamingCount - 1)
         return true

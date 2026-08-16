@@ -48,7 +48,7 @@ struct ChatView: View {
     private var conversationList: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Чаты")
+                Text("Chats")
                     .font(.headline)
                 Spacer()
                 Button {
@@ -58,12 +58,12 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.tint)
-                .help("Новый чат")
-                .accessibilityLabel("Новый чат")
+                .help("New chat")
+                .accessibilityLabel("New chat")
             }
 
             if conversations.isEmpty {
-                Text("Создайте новый чат.")
+                Text("Create a new chat.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -97,10 +97,10 @@ struct ChatView: View {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(Theme.lavenderGradient)
-            Text("Выберите чат или создайте новый")
+            Text("Pick a chat or create a new one")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Button("Новый чат", systemImage: "square.and.pencil") {
+            Button("New chat", systemImage: "square.and.pencil") {
                 chatStore.create()
             }
             .buttonStyle(.borderedProminent)
@@ -141,15 +141,15 @@ private struct ConversationRow: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Удалить", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 confirmingDelete = true
             }
         }
-        .alert("Удалить чат?", isPresented: $confirmingDelete) {
-            Button("Удалить", role: .destructive, action: onDelete)
-            Button("Отмена", role: .cancel) {}
+        .alert("Delete this chat?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Историю этого чата нельзя будет восстановить.")
+            Text("This chat's history cannot be recovered.")
         }
     }
 }
@@ -243,7 +243,7 @@ struct ChatThreadView: View {
     }
 
     private func modelPicker(maxWidth: CGFloat) -> some View {
-        Picker("Модель", selection: modelBinding) {
+        Picker("Model", selection: modelBinding) {
             Text(defaultModelLabel).tag("")
             ForEach(offeredModels, id: \.self) { model in
                 Text(model).tag(model)
@@ -252,13 +252,13 @@ struct ChatThreadView: View {
         .labelsHidden()
         .frame(minWidth: 120, maxWidth: maxWidth)
         .controlSize(.small)
-        .help("Выбрать модель")
-        .accessibilityLabel("Модель")
+        .help("Choose a model")
+        .accessibilityLabel("Model")
     }
 
     private var reasoningPicker: some View {
-        Picker("Глубина рассуждения", selection: reasoningBinding) {
-            Text("Глубина: по умолчанию").tag("")
+        Picker("Reasoning depth", selection: reasoningBinding) {
+            Text("Depth: default").tag("")
             ForEach(chatStore.capabilities.reasoningLevels, id: \.self) { level in
                 Text(Self.reasoningLabel(level)).tag(level)
             }
@@ -266,7 +266,7 @@ struct ChatThreadView: View {
         .labelsHidden()
         .fixedSize()
         .controlSize(.small)
-        .help("Глубина рассуждения")
+        .help("Reasoning depth")
     }
 
     private func regenerate() {
@@ -287,7 +287,7 @@ struct ChatThreadView: View {
 
     private var defaultModelLabel: String {
         let model = chatStore.capabilities.defaultModel
-        return model.isEmpty ? "Модель по умолчанию" : "По умолчанию (\(model))"
+        return model.isEmpty ? "Default model" : "Default (\(model))"
     }
 
     private var modelBinding: Binding<String> {
@@ -306,16 +306,16 @@ struct ChatThreadView: View {
 
     private static func reasoningLabel(_ level: String) -> String {
         switch level {
-        case "none": "Глубина: выкл"
-        case "minimal": "Глубина: минимум"
-        case "low": "Глубина: низкая"
-        case "medium": "Глубина: средняя"
-        case "high": "Глубина: высокая"
+        case "none": "Depth: off"
+        case "minimal": "Depth: minimal"
+        case "low": "Depth: low"
+        case "medium": "Depth: medium"
+        case "high": "Depth: high"
         // makora's own vocabulary: "max" above high, and gemma exposes a plain
         // on/off pair instead of a scale.
-        case "max": "Глубина: максимум"
-        case "enabled": "Глубина: вкл"
-        default: "Глубина: \(level)"
+        case "max": "Depth: max"
+        case "enabled": "Depth: on"
+        default: "Depth: \(level)"
         }
     }
 
@@ -390,7 +390,7 @@ struct ChatThreadView: View {
             }
 
             if !compact, !chatStore.capabilities.ready {
-                Text("Сервис чата недоступен — проверьте подключение в настройках")
+                Text("The chat service is unavailable — check the connection in Settings")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -449,8 +449,8 @@ struct ChatThreadView: View {
                 || (!chatStore.isStreaming && conversation?.messages.isEmpty == false) {
                 Menu {
                     if !chatStore.capabilities.reasoningLevels.isEmpty {
-                        Picker("Глубина рассуждения", selection: reasoningBinding) {
-                            Text("По умолчанию").tag("")
+                        Picker("Reasoning depth", selection: reasoningBinding) {
+                            Text("Default").tag("")
                             ForEach(chatStore.capabilities.reasoningLevels, id: \.self) { level in
                                 Text(Self.reasoningLabel(level)).tag(level)
                             }
@@ -458,7 +458,7 @@ struct ChatThreadView: View {
                     }
                     if !chatStore.isStreaming, conversation?.messages.isEmpty == false {
                         Divider()
-                        Button("Перегенерировать", systemImage: "arrow.counterclockwise") {
+                        Button("Regenerate", systemImage: "arrow.counterclockwise") {
                             regenerate()
                         }
                     }
@@ -469,8 +469,8 @@ struct ChatThreadView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .help("Параметры ответа")
-                .accessibilityLabel("Параметры ответа")
+                .help("Answer options")
+                .accessibilityLabel("Answer options")
             }
 
             primaryComposerButton
@@ -490,8 +490,8 @@ struct ChatThreadView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
-        .help("Прикрепить изображение")
-        .accessibilityLabel("Прикрепить изображение")
+        .help("Attach an image")
+        .accessibilityLabel("Attach an image")
     }
 
     private var regenerateButton: some View {
@@ -503,8 +503,8 @@ struct ChatThreadView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help("Перегенерировать последний ответ")
-        .accessibilityLabel("Перегенерировать последний ответ")
+        .help("Regenerate the last answer")
+        .accessibilityLabel("Regenerate the last answer")
     }
 
     private var primaryComposerButton: some View {
@@ -535,8 +535,8 @@ struct ChatThreadView: View {
         }
         .buttonStyle(.plain)
         .disabled(!primaryActionAvailable)
-        .help(chatStore.isStreaming ? "Остановить ответ" : "Отправить (Enter)")
-        .accessibilityLabel(chatStore.isStreaming ? "Остановить ответ" : "Отправить")
+        .help(chatStore.isStreaming ? "Stop the answer" : "Send (Enter)")
+        .accessibilityLabel(chatStore.isStreaming ? "Stop the answer" : "Send")
     }
 
     private var primaryActionAvailable: Bool {
@@ -565,7 +565,7 @@ struct ChatThreadView: View {
         }
         if chatStore.capabilities.refusesImages, !attachments.isEmpty {
             return (
-                "Модель \(chatStore.capabilities.model) не принимает изображения — выберите другую.",
+                "Model \(chatStore.capabilities.model) does not accept images — pick another one.",
                 "exclamationmark.triangle.fill",
                 .orange
             )
@@ -591,7 +591,7 @@ struct ChatThreadView: View {
             )
             if chatStore.capabilities.refusesImages {
                 attachmentError =
-                    "Модель \(chatStore.capabilities.model) работает только с текстом. Уберите изображения или смените модель."
+                    "Model \(chatStore.capabilities.model) is text-only. Remove the images or switch models."
                 return
             }
             performSend()
@@ -631,7 +631,7 @@ struct ChatThreadView: View {
         guard !new.isEmpty else { return }
         let room = ChatImageLoader.maxPerMessage - attachments.count
         if room <= 0 {
-            attachmentError = "Не больше \(ChatImageLoader.maxPerMessage) изображений в сообщении."
+            attachmentError = "No more than \(ChatImageLoader.maxPerMessage) images per message."
             return
         }
         attachmentError = nil
@@ -678,7 +678,7 @@ struct ChatThreadView: View {
         for provider in providers {
             _ = provider.loadDataRepresentation(for: .image) { data, _ in
                 guard let data, let image = NSImage(data: data),
-                      let attachment = ChatImageLoader.attachment(from: image, name: "Вставка")
+                      let attachment = ChatImageLoader.attachment(from: image, name: "Pasted")
                 else { return }
                 Task { @MainActor [attachment] in
                     add([attachment])
@@ -726,7 +726,7 @@ private struct MessageBubble: View {
             alignment: message.role == .user ? .trailing : .leading
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(message.role == .user ? "Ваше сообщение" : "Ответ ассистента")
+        .accessibilityLabel(message.role == .user ? "Your message" : "Assistant answer")
     }
 }
 
@@ -747,16 +747,16 @@ private struct StreamingBubble: View {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Готовлю ответ…")
+                Text("Preparing the answer…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Ассистент готовит ответ")
+            .accessibilityLabel("The assistant is preparing an answer")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Ответ ассистента")
+        .accessibilityLabel("Assistant answer")
     }
 }
 
@@ -776,7 +776,7 @@ private struct AttachmentStrip: View {
                                 .aspectRatio(contentMode: .fill)
                                 .frame(width: compact ? 44 : 72, height: compact ? 44 : 72)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .accessibilityLabel("Изображение: \(attachment.name)")
+                                .accessibilityLabel("Image: \(attachment.name)")
                         }
                         if let onRemove {
                             Button {
@@ -787,7 +787,7 @@ private struct AttachmentStrip: View {
                             }
                             .buttonStyle(.plain)
                             .padding(3)
-                            .accessibilityLabel("Удалить изображение \(attachment.name)")
+                            .accessibilityLabel("Remove image \(attachment.name)")
                         }
                     }
                     .help(attachment.name)

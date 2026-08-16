@@ -139,10 +139,10 @@ struct ChatComposerTextView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.drawsBackground = false
         textView.font = .systemFont(ofSize: NSFont.systemFontSize)
-        textView.placeholder = "Сообщение…"
-        textView.setAccessibilityLabel("Сообщение")
-        textView.setAccessibilityPlaceholderValue("Сообщение…")
-        textView.setAccessibilityHelp("Enter — отправить, Shift+Enter — перенос строки")
+        textView.placeholder = "Message…"
+        textView.setAccessibilityLabel("Message")
+        textView.setAccessibilityPlaceholderValue("Message…")
+        textView.setAccessibilityHelp("Enter sends, Shift+Enter adds a line break")
         // With a 34pt single-line field, 8pt centers the system font and caret
         // on the same horizontal axis as the two 30pt action buttons.
         textView.textContainerInset = NSSize(width: 2, height: 8)
@@ -269,7 +269,7 @@ final class PasteAwareTextView: NSTextView {
         if let images = pasteboard.readObjects(forClasses: [NSImage.self]) as? [NSImage],
            !images.isEmpty {
             let attachments = images.compactMap {
-                ChatImageLoader.attachment(from: $0, name: "Вставка")
+                ChatImageLoader.attachment(from: $0, name: "Pasted")
             }
             if !attachments.isEmpty {
                 onPasteImages?(attachments)

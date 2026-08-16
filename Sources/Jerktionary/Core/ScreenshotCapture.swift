@@ -23,9 +23,9 @@ enum ScreenshotCapture {
         var errorDescription: String? {
             switch self {
             case .permissionDenied:
-                "Нет доступа к записи экрана. Разрешите в System Settings → Privacy & Security → Screen Recording."
+                "No screen recording access. Allow it in System Settings → Privacy & Security → Screen Recording."
             case .failed:
-                "Не удалось сделать снимок экрана."
+                "Could not take the screenshot."
             }
         }
     }
@@ -47,7 +47,7 @@ enum ScreenshotCapture {
 
         guard let data = try? Data(contentsOf: url), !data.isEmpty,
               let image = NSImage(data: data),
-              let attachment = ChatImageLoader.attachment(from: image, name: "Экран")
+              let attachment = ChatImageLoader.attachment(from: image, name: "Screen")
         else { throw Failure.failed }
         return attachment
     }

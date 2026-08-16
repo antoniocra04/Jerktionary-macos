@@ -12,7 +12,7 @@ struct ListenButton: View {
             Task { await store.toggleListening() }
         } label: {
             Label(
-                store.isListening ? "Стоп" : "Слушать",
+                store.isListening ? "Stop" : "Listen",
                 systemImage: store.isListening ? "stop.fill" : "mic.fill"
             )
             .font(.body.weight(.medium))
@@ -48,7 +48,7 @@ struct LevelMeterView: View {
         }
         .frame(width: 96, height: 5)
         .accessibilityElement()
-        .accessibilityLabel("Уровень звука")
-        .accessibilityValue("\(Int(level * 100)) процентов")
+        .accessibilityLabel("Audio level")
+        .accessibilityValue("\(Int(level * 100)) percent")
     }
 }

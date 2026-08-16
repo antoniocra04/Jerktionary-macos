@@ -4,14 +4,14 @@ import XCTest
 
 final class TranscriptExcerptTests: XCTestCase {
     func testLatestTakesLastTwoSentencesWithoutDetectingIntent() {
-        let text = "Первое. Второе. Третье."
-        XCTAssertEqual(TranscriptExcerpt.latest(in: text), "Второе. Третье")
+        let text = "First. Second. Third."
+        XCTAssertEqual(TranscriptExcerpt.latest(in: text), "Second. Third")
     }
 
     func testLatestAcceptsAStatement() {
         XCTAssertEqual(
-            TranscriptExcerpt.latest(in: "Сегодня хорошая погода."),
-            "Сегодня хорошая погода"
+            TranscriptExcerpt.latest(in: "The weather is nice today."),
+            "The weather is nice today"
         )
     }
 
@@ -32,7 +32,7 @@ final class TermMergerTests: XCTestCase {
     }
 
     func testOverlapPrefersLongerSpan() {
-        let text = "event loop работает"
+        let text = "event loop is running"
         let short = term("event", 0, 5)
         let long = term("event loop", 0, 10)
         let segments = TermMerger.highlightSegments(text: text, terms: [short, long])
@@ -44,8 +44,8 @@ final class TermMergerTests: XCTestCase {
     }
 
     func testSegmentsCoverWholeText() {
-        let text = "изучаем docker и kubernetes"
-        let terms = [term("docker", 8, 14), term("kubernetes", 17, 27)]
+        let text = "studying docker and kubernetes"
+        let terms = [term("docker", 9, 15), term("kubernetes", 20, 30)]
         let segments = TermMerger.highlightSegments(text: text, terms: terms)
         let joined = segments.map { segment in
             switch segment {
@@ -66,8 +66,8 @@ final class TermMergerTests: XCTestCase {
 final class TranscriptDocumentTests: XCTestCase {
     func testCommonPrefixCountsCharactersRatherThanUTF16Units() {
         XCTAssertEqual(
-            TranscriptDocument.commonPrefixCharacterCount("Привет 👋 мир", "Привет 👋 друг"),
-            9
+            TranscriptDocument.commonPrefixCharacterCount("Hello 👋 world", "Hello 👋 friend"),
+            8
         )
     }
 
@@ -144,8 +144,8 @@ final class PCMTests: XCTestCase {
 
 final class BackendClientHelperTests: XCTestCase {
     func testParsePointsStripsBullets() {
-        let points = BackendClient.parsePoints("- один\n• два\n* три\n\n")
-        XCTAssertEqual(points, ["один", "два", "три"])
+        let points = BackendClient.parsePoints("- one\n• two\n* three\n\n")
+        XCTAssertEqual(points, ["one", "two", "three"])
     }
 
     func testTermContextCentersOnTerm() {
@@ -165,14 +165,14 @@ final class BackendClientHelperTests: XCTestCase {
 final class WsEventParsingTests: XCTestCase {
     func testTranscriptUpdateParsing() throws {
         let json = """
-        {"type":"transcript_update","text":"привет","is_final":true,
-         "terms":[{"text":"привет","normalized":"привет","start":0,"end":6,"type":"noun","confidence":0.8}]}
+        {"type":"transcript_update","text":"hello","is_final":true,
+         "terms":[{"text":"hello","normalized":"hello","start":0,"end":5,"type":"noun","confidence":0.8}]}
         """
         let event = BackendWsEvent.parse(Data(json.utf8))
         guard case .transcriptUpdate(let text, let isFinal, let terms) = event else {
             return XCTFail("wrong event")
         }
-        XCTAssertEqual(text, "привет")
+        XCTAssertEqual(text, "hello")
         XCTAssertTrue(isFinal)
         XCTAssertEqual(terms.count, 1)
     }
@@ -205,32 +205,32 @@ final class ChatTests: XCTestCase {
 
     func testDisplayTitleUsesTheFirstUserLine() {
         var conversation = Conversation.new()
-        conversation.messages = [message(.user, "Первая строка\nвторая")]
-        XCTAssertEqual(conversation.displayTitle, "Первая строка")
+        conversation.messages = [message(.user, "First line\nsecond")]
+        XCTAssertEqual(conversation.displayTitle, "First line")
     }
 
     func testDisplayTitleIsBoundedForAPastedWall() {
         // Same guard as notes: an unbounded first "line" becomes a giant
         // single-line Text in the list and costs milliseconds per row.
         var conversation = Conversation.new()
-        conversation.messages = [message(.user, String(repeating: "длинно ", count: 5_000))]
+        conversation.messages = [message(.user, String(repeating: "verylong ", count: 5_000))]
         XCTAssertLessThanOrEqual(conversation.displayTitle.count, Note.titleLengthLimit)
     }
 
     func testDisplayTitleFallsBackForAnImageOnlyTurn() {
         var conversation = Conversation.new()
         conversation.messages = [message(.user, "", [pngAttachment])]
-        XCTAssertEqual(conversation.displayTitle, "Изображение")
+        XCTAssertEqual(conversation.displayTitle, "Image")
     }
 
     func testDisplayTitleIgnoresAssistantTurns() {
         var conversation = Conversation.new()
-        conversation.messages = [message(.assistant, "Ответ"), message(.user, "Вопрос")]
-        XCTAssertEqual(conversation.displayTitle, "Вопрос")
+        conversation.messages = [message(.assistant, "Answer"), message(.user, "Question")]
+        XCTAssertEqual(conversation.displayTitle, "Question")
     }
 
     func testEmptyConversationHasAPlaceholderTitle() {
-        XCTAssertEqual(Conversation.new().displayTitle, "Новый чат")
+        XCTAssertEqual(Conversation.new().displayTitle, "New chat")
     }
 
     func testAttachmentDecodesItsDataURI() {
@@ -248,7 +248,7 @@ final class ChatTests: XCTestCase {
     func testWireMessageWrapsImagesAsDataUrlObjects() throws {
         // The backend schema takes [{data_url: …}]; bare strings fail validation.
         let wire = BackendClient.ChatWireMessage(
-            role: "user", content: "что тут?", images: ["data:image/png;base64,aGVsbG8="]
+            role: "user", content: "what is this?", images: ["data:image/png;base64,aGVsbG8="]
         )
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(wire))
         let dict = try XCTUnwrap(json as? [String: Any])
@@ -258,7 +258,7 @@ final class ChatTests: XCTestCase {
     }
 
     func testWireMessageWithoutImagesSendsAnEmptyArray() throws {
-        let wire = BackendClient.ChatWireMessage(role: "assistant", content: "ответ", images: [])
+        let wire = BackendClient.ChatWireMessage(role: "assistant", content: "answer", images: [])
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(wire))
         let dict = try XCTUnwrap(json as? [String: Any])
         XCTAssertEqual((dict["images"] as? [Any])?.count, 0)

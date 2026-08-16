@@ -62,10 +62,10 @@ final class TranscriptWSClient: NSObject, @unchecked Sendable {
                     if let event = BackendWsEvent.parse(Data(text.utf8)) {
                         self.onEvent?(event)
                     } else {
-                        self.onError?("Сервис распознавания прислал неизвестное событие")
+                        self.onError?("The recognition service sent an unknown event")
                     }
                 case .data:
-                    self.onError?("Сервис распознавания прислал некорректное сообщение")
+                    self.onError?("The recognition service sent a malformed message")
                 @unknown default:
                     break
                 }
@@ -120,7 +120,7 @@ extension TranscriptWSClient: URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if error != nil {
             onStatus?(.error)
-            onError?("Ошибка WebSocket соединения")
+            onError?("WebSocket connection error")
             handleClose()
         }
     }
